@@ -18,6 +18,6 @@ const content = [
 ];
 const envPath = resolve(root, 'apps/web/.env.local');
 const existing = (() => { try { return readFileSync(envPath, 'utf8'); } catch { return ''; } })();
-const solanaLines = existing.split(/\r?\n/).filter((line) => line.startsWith('VITE_SOLANA_'));
-writeFileSync(envPath, [...content, ...solanaLines, ''].join('\n'));
+const otherChainLines = existing.split(/\r?\n/).filter((line) => line.startsWith('VITE_SOLANA_') || line.startsWith('VITE_SUI_'));
+writeFileSync(envPath, [...content, ...otherChainLines, ''].join('\n'));
 console.log('Wrote local deployment addresses to apps/web/.env.local');

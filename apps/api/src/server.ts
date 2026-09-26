@@ -6,6 +6,8 @@ import cors from '@fastify/cors';
 import { PublicKey } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import { getAddress, isAddress, verifyMessage } from 'viem';
+import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
+import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
 import { type Challenge, type Ecosystem, type Purpose, type WalletRow } from './db.js';
 
 const CHALLENGE_MS = 5 * 60_000;
@@ -16,6 +18,7 @@ const error = (code: string, message: string) => ({ error: { code, message } });
 
 function normalizeAddress(ecosystem: Ecosystem, address: string): string | null {
   if (ecosystem === 'evm') return isAddress(address) ? getAddress(address).toLowerCase() : null;
+  if (ecosystem === 'sui') return isValidSuiAddress(address) ? normalizeSuiAddress(address) : null;
   try { return new PublicKey(address).toBase58(); } catch { return null; }
 }
 
@@ -44,7 +47,7 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
   }
 
   function issueChallenge(ecosystem: unknown, address: unknown, purpose: Purpose, userId: string | null) {
-    if ((ecosystem !== 'evm' && ecosystem !== 'solana') || typeof address !== 'string') return null;
+    if ((ecosystem !== 'evm' && ecosystem !== 'solana' && ecosystem !== 'sui') || typeof address !== 'string') return null;
     const normalized = normalizeAddress(ecosystem, address);
     if (!normalized) return null;
     const id = randomUUID();
@@ -67,7 +70,7 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
 
   async function verifyChallenge(challengeId: unknown, ecosystem: unknown, address: unknown, signature: unknown, purpose: Purpose, userId: string | null) {
     if (typeof challengeId !== 'string' || typeof signature !== 'string' || typeof address !== 'string' ||
-      (ecosystem !== 'evm' && ecosystem !== 'solana')) return { failure: error('invalid_request', 'Invalid verification request.'), status: 400 };
+      (ecosystem !== 'evm' && ecosystem !== 'solana' && ecosystem !== 'sui')) return { failure: error('invalid_request', 'Invalid verification request.'), status: 400 };
     const normalized = normalizeAddress(ecosystem, address);
     if (!normalized) return { failure: error('invalid_address', 'Invalid wallet address.'), status: 400 };
     const challenge = db.prepare('SELECT * FROM auth_challenges WHERE id = ?').get(challengeId) as Challenge | undefined;
@@ -79,6 +82,9 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
     try {
       if (ecosystem === 'evm') {
         valid = await verifyMessage({ address: normalized as `0x${string}`, message: challenge.message, signature: signature as `0x${string}` });
+      } else if (ecosystem === 'sui') {
+        await verifyPersonalMessageSignature(new TextEncoder().encode(challenge.message), signature, { address: normalized });
+        valid = true;
       } else {
         const bytes = decodeSignature(signature);
         valid = Boolean(bytes && nacl.sign.detached.verify(new TextEncoder().encode(challenge.message), bytes, new PublicKey(normalized).toBytes()));

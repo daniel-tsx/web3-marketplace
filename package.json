@@ -19,6 +19,9 @@
     "solana:deploy": "pnpm --dir packages/solana deploy",
     "solana:seed": "pnpm --dir packages/solana seed",
     "solana:test": "pnpm --dir packages/solana test:anchor",
+    "sui:test": "pnpm --dir packages/sui test",
+    "sui:move:build": "sui move build --path packages/sui/move",
+    "sui:move:test": "sui move test --path packages/sui/move",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm --dir apps/web lint",
     "build": "pnpm --dir apps/web build"

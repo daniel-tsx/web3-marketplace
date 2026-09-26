@@ -1,5 +1,7 @@
-export type Ecosystem = 'evm' | 'solana';
-export type ExecutionStatus = 'unauthenticated' | 'wallet-not-linked' | 'wallet-not-connected' | 'wallet-mismatch' | 'wrong-network' | 'ready';
+import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
+
+export type Ecosystem = 'evm' | 'solana' | 'sui';
+export type ExecutionStatus = 'unauthenticated' | 'wallet-not-linked' | 'wallet-not-connected' | 'wallet-mismatch' | 'wrong-network' | 'resource-unavailable' | 'ready';
 
 export interface LinkedWallet { ecosystem: Ecosystem; address: string; }
 export interface ExecutionRequirement { ecosystem: Ecosystem; network: string; }
@@ -15,10 +17,14 @@ export function resolveExecution(input: {
   linkedWallets: LinkedWallet[];
   connectedWallet?: string;
   networkReady: boolean;
+  resourcesReady?: boolean;
 }): ExecutionContext {
-  const { requirement, userId, linkedWallets, connectedWallet, networkReady } = input;
+  const { requirement, userId, linkedWallets, connectedWallet, networkReady, resourcesReady = true } = input;
   const matches = (a: string, b: string) => requirement.ecosystem === 'evm'
-    ? a.toLowerCase() === b.toLowerCase() : a === b;
+    ? a.toLowerCase() === b.toLowerCase()
+    : requirement.ecosystem === 'sui'
+      ? isValidSuiAddress(a) && isValidSuiAddress(b) && normalizeSuiAddress(a) === normalizeSuiAddress(b)
+      : a === b;
   const linked = linkedWallets.filter((wallet) => wallet.ecosystem === requirement.ecosystem);
   const context = { ...requirement, connectedWallet, linkedWallet: linked.find((wallet) => connectedWallet && matches(wallet.address, connectedWallet))?.address ?? linked[0]?.address };
   if (!userId) return { ...context, status: 'unauthenticated' };
@@ -26,6 +32,7 @@ export function resolveExecution(input: {
   if (!connectedWallet) return { ...context, status: 'wallet-not-connected' };
   if (!linked.some((wallet) => matches(wallet.address, connectedWallet))) return { ...context, status: 'wallet-mismatch' };
   if (!networkReady) return { ...context, status: 'wrong-network' };
+  if (!resourcesReady) return { ...context, status: 'resource-unavailable' };
   return { ...context, status: 'ready' };
 }
 
@@ -36,6 +43,7 @@ export function executionPrompt(context: ExecutionContext): string | null {
     case 'wallet-not-connected': return `Connect your linked ${context.ecosystem.toUpperCase()} wallet.`;
     case 'wallet-mismatch': return `Connected ${context.ecosystem.toUpperCase()} wallet differs from this account’s linked wallet. Switch wallets or link this one explicitly.`;
     case 'wrong-network': return `Select or start ${context.network} before this action.`;
+    case 'resource-unavailable': return `${context.ecosystem.toUpperCase()} marketplace configuration or on-chain resources are unavailable.`;
     case 'ready': return null;
   }
 }
