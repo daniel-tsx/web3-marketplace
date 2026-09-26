@@ -19,8 +19,13 @@ button:disabled { opacity: .55; cursor: wait; }
 button:focus-visible, input:focus-visible { outline: 3px solid #74b8dd; outline-offset: 2px; }
 input { width: 120px; margin: 6px 8px 6px 0; padding: 9px; border: 1px solid #aebdc7; border-radius: 6px; font: inherit; }
 .action-row { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+.account-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.account-columns code { overflow-wrap: anywhere; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.muted { color: #5b6a75; font-size: .9rem; }
+.execution-prompt { border-left: 3px solid #b67c25; padding-left: 10px; }
 .transaction { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid #e4eaee; font-size: .9rem; overflow-wrap: anywhere; }
-.error { color: #a02020; }
+.error { color: #a02020; overflow-wrap: anywhere; }
 footer { margin-top: 28px; color: #5b6a75; font-size: .9rem; }
-@media (max-width: 650px) { header { flex-direction: column; } dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 10px; } }
+@media (max-width: 650px) { header { flex-direction: column; } .account-columns { grid-template-columns: 1fr; } dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 10px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }

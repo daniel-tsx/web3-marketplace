@@ -1,0 +1,25 @@
+{
+  "name": "@vehicle/solana",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/client.ts" },
+  "scripts": {
+    "prepare:local": "tsx scripts/prepare-local.ts",
+    "validator": "solana-test-validator",
+    "build": "anchor build",
+    "deploy": "anchor deploy",
+    "seed": "tsx scripts/seed.ts",
+    "test:anchor": "tsx --test tests/vehicle-marketplace.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.98.0",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

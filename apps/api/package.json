@@ -1,0 +1,25 @@
+{
+  "name": "@vehicle/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "db": "tsx src/init-db.ts",
+    "test": "tsx --test src/server.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/cors": "^11.0.0",
+    "@solana/web3.js": "^1.98.0",
+    "fastify": "^5.0.0",
+    "tweetnacl": "^1.0.3",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

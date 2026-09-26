@@ -6,3 +6,7 @@ packages/contracts/broadcast/
 apps/web/.env.local
 .env
 .tools/
+apps/api/.local/
+packages/solana/.local/
+packages/solana/target/
+packages/solana/.anchor/

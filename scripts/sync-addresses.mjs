@@ -15,7 +15,9 @@ const content = [
   `VITE_MOCK_USDC_ADDRESS=${addressFor('MockUSDC')}`,
   `VITE_VEHICLE_NFT_ADDRESS=${addressFor('VehicleNFT')}`,
   `VITE_MARKETPLACE_ADDRESS=${addressFor('VehicleMarketplace')}`,
-  ''
-].join('\n');
-writeFileSync(resolve(root, 'apps/web/.env.local'), content);
+];
+const envPath = resolve(root, 'apps/web/.env.local');
+const existing = (() => { try { return readFileSync(envPath, 'utf8'); } catch { return ''; } })();
+const solanaLines = existing.split(/\r?\n/).filter((line) => line.startsWith('VITE_SOLANA_'));
+writeFileSync(envPath, [...content, ...solanaLines, ''].join('\n'));
 console.log('Wrote local deployment addresses to apps/web/.env.local');

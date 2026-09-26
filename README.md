@@ -1,44 +1,46 @@
-# Vehicle Marketplace · Run 01 EVM baseline
+# Vehicle Marketplace · Run 02
 
-A small, browser-only Web3 interview study project. Three Solidity contracts run on local Anvil. The Vite UI uses Wagmi, Viem, RainbowKit, and TanStack Query to expose every approval, listing, and purchase step.
+An interview study monorepo for application identity across EVM and Solana wallets. Run 1's Anvil marketplace remains on-chain; Run 2 adds a Fastify/SQLite session API, signed EVM and Solana login, wallet linking, an Anchor escrow marketplace, and a mixed Vite catalog. The database contains identity state only.
 
-Start with [the implementation study guide](docs/run-01-evm-baseline.md).
+Read [the Run 2 implementation guide](docs/run-02-auth-solana-multichain.md) for diagrams, the local run sequence, transaction traces, tests, and known limits. [Run 1's baseline](docs/run-01-evm-baseline.md) remains useful for the EVM contract flow.
 
 ## Requirements
 
-- Node.js 20+ and pnpm 10+
-- Foundry (`forge`, `anvil`) on `PATH`
-- An injected browser wallet, such as MetaMask, configured for Anvil chain 31337 at `http://127.0.0.1:8545`
+- Node.js 24+ and pnpm 10+
+- Foundry for Anvil and Solidity tests
+- An injected EVM wallet configured for Anvil chain 31337
+- A Solana wallet with `signMessage` and localnet transaction support, such as Phantom
+- Solana CLI/local validator and Anchor CLI 0.32.1 for the Solana program. On Windows, install these inside WSL; the Solana toolchain is not installed by `pnpm install`.
 
-## Fresh local run
+## Local sequence
 
-From the repository root:
-
-```sh
-pnpm install
-pnpm anvil
-```
-
-Keep Anvil running. In another terminal:
+Run `pnpm install` and `pnpm api:db` from the repository root. Start `pnpm api:dev`, `pnpm anvil`, and `pnpm solana:validator` in separate terminals. Then run:
 
 ```sh
 pnpm contracts:build
-pnpm contracts:test
 pnpm contracts:deploy
+pnpm solana:prepare
+pnpm solana:build
+pnpm solana:deploy
+pnpm solana:seed
 pnpm dev
 ```
 
-Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` before building contracts. `contracts:deploy` deploys and seeds a fresh local chain, then writes `apps/web/.env.local` with addresses from Foundry's broadcast file. Restart Vite after every reset and redeploy. `contracts:build` exports ABIs from Foundry artifacts into `apps/web/src/contracts/abis.ts`.
+`solana:seed` creates local-only mint/accounts, a 12,000 mUSDC escrow listing, and writes public Solana addresses to `apps/web/.env.local` while preserving EVM addresses. `contracts:deploy` preserves these Solana lines on later EVM redeploys. Restart Vite after either chain's seed/deploy script changes `.env.local`. Keep API origin at `http://localhost:5173` and Vite at its default port for cookie and Origin checks.
 
-Anvil's standard account 0 is the deployer, seller of vehicles 1 and 3, and fee recipient. Account 2 owns vehicle 2; account 1 is the buyer with 100,000 mUSDC. Import or select these local accounts in your wallet. They are development accounts only; never send real funds to them. All prices use six decimal places; the marketplace fee is 250 basis points (2.5%).
+The deterministic Solana accounts in `packages/solana/scripts/local-keys.ts` and Foundry accounts are **local validator fixtures only**. Never fund them on a public network. No private key is sent to the browser or authentication API.
 
 ## Checks
 
 ```sh
+pnpm contracts:test
+pnpm api:test
+pnpm execution:test
+pnpm solana:test
 pnpm typecheck
 pnpm lint
 pnpm build
-pnpm contracts:test
+pnpm --dir apps/api build
 ```
 
-`pnpm build` builds the frontend. `pnpm contracts:build` rebuilds Solidity and regenerates the frontend ABIs. This project intentionally has no backend, indexer, or production deployment path.
+`pnpm solana:test` needs the validator and deployed program. The Run 2 guide covers the exact setup, source-of-truth boundaries, and Windows toolchain limitation.

@@ -1,23 +1,5 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { WagmiProvider } from 'wagmi';
-import '@rainbow-me/rainbowkit/styles.css';
-import App from './App';
-import { wagmiConfig } from './contracts/config';
-import './styles.css';
+import { Buffer } from 'buffer';
 
-const queryClient = new QueryClient();
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
-          <App />
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  </React.StrictMode>,
-);
+// SPL Token's browser bundle reads Buffer while its modules initialize.
+(globalThis as typeof globalThis & { Buffer: typeof Buffer }).Buffer = Buffer;
+void import('./bootstrap');

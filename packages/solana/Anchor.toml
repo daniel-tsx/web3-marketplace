@@ -1,0 +1,15 @@
+[toolchain]
+anchor_version = "0.32.1"
+
+[features]
+resolution = true
+
+[programs.localnet]
+vehicle_marketplace = "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB"
+
+[provider]
+cluster = "Localnet"
+wallet = "./.local/deployer.json"
+
+[scripts]
+test = "pnpm test:anchor"

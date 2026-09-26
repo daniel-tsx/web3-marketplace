@@ -12,7 +12,7 @@ import { TransactionStatus } from './TransactionStatus';
 const sameAddress = (a?: Address, b?: Address) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
 
-export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: Address }) {
+export function VehicleCard({ tokenId, account, executionReady }: { tokenId: bigint; account?: Address; executionReady: boolean }) {
   const [priceInput, setPriceInput] = useState('1000');
   const queryClient = useQueryClient();
   const { writeContractAsync } = useWriteContract();
@@ -34,7 +34,7 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
   }
 
   function approveNft() {
-    if (!account || !sameAddress(account, owner)) return;
+    if (!executionReady || !account || !sameAddress(account, owner)) return;
     void tx.run(
       () => writeContractAsync({ address: addresses.nft, abi: VehicleNFTAbi, functionName: 'approve', args: [addresses.marketplace, tokenId], account, chainId: localChain.id }),
       () => refresh(data.nftApproval.queryKey),
@@ -42,7 +42,7 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
   }
 
   function listVehicle() {
-    if (!account || !sameAddress(account, owner) || !data.approved || (active && !staleOwner)) return;
+    if (!executionReady || !account || !sameAddress(account, owner) || !data.approved || (active && !staleOwner)) return;
     let listingPrice: bigint;
     try {
       listingPrice = parseUnits(priceInput, 6);
@@ -55,7 +55,7 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
   }
 
   function cancelListing() {
-    if (!account || !active || !sameAddress(account, seller)) return;
+    if (!executionReady || !account || !active || !sameAddress(account, seller)) return;
     void tx.run(
       () => writeContractAsync({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'cancelListing', args: [tokenId], account, chainId: localChain.id }),
       () => refresh(data.listing.queryKey),
@@ -63,7 +63,7 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
   }
 
   function approveUsdc() {
-    if (!account || !active || !price || !buyerReady || (data.balance.data ?? 0n) < price) return;
+    if (!executionReady || !account || !active || !price || !buyerReady || (data.balance.data ?? 0n) < price) return;
     void tx.run(
       () => writeContractAsync({ address: addresses.usdc, abi: MockUSDCAbi, functionName: 'approve', args: [addresses.marketplace, price], account, chainId: localChain.id }),
       () => refresh(data.allowance.queryKey),
@@ -77,7 +77,7 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
   }
 
   function buyVehicle() {
-    if (!account || !active || staleOwner || !data.approved || !price || !buyerReady || sameAddress(account, seller)) return;
+    if (!executionReady || !account || !active || staleOwner || !data.approved || !price || !buyerReady || sameAddress(account, seller)) return;
     if ((data.balance.data ?? 0n) < price || (data.allowance.data ?? 0n) < price) return;
     void tx.run(
       () => writeContractAsync({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args: [tokenId], account, chainId: localChain.id }),
@@ -89,11 +89,11 @@ export function VehicleCard({ tokenId, account }: { tokenId: bigint; account?: A
 
   const ownVehicle = sameAddress(account, owner);
   const ownListing = active && sameAddress(account, seller);
-  const canShowSellerActions = account && data.owner.isSuccess && data.listing.isSuccess && data.nftApproval.isSuccess && data.operatorApproval.isSuccess;
-  const canShowBuyerActions = account && active && !ownListing && !staleOwner && data.approved && buyerReady;
+  const canShowSellerActions = executionReady && account && data.owner.isSuccess && data.listing.isSuccess && data.nftApproval.isSuccess && data.operatorApproval.isSuccess;
+  const canShowBuyerActions = executionReady && account && active && !ownListing && !staleOwner && data.approved && buyerReady;
 
   return <article className="vehicle-card">
-    <h2>Vehicle #{tokenId.toString()}</h2>
+    <p className="eyebrow">EVM · Anvil 31337</p><h2>Vehicle #{tokenId.toString()}</h2>
     <dl>
       <dt>Current owner</dt><dd><code>{owner ?? 'Loading…'}</code></dd>
       <dt>Listing</dt><dd>{active ? staleOwner ? 'Stale: NFT changed hands' : 'Active' : 'Inactive'}</dd>

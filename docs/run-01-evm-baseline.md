@@ -1,6 +1,6 @@
 # Run 01: EVM marketplace baseline
 
-Status: **current**. This describes the code in this repository as implemented for local Anvil. The learning objective is to trace a transaction end to end and explain which layer owns each state transition.
+Status: **historical baseline**. This describes the Run 1 local Anvil implementation. Run 2 preserves the EVM contract flow and adds authentication and Solana; see [the current Run 2 guide](run-02-auth-solana-multichain.md). The learning objective here is to trace an EVM transaction end to end and explain which layer owns each state transition.
 
 ## What exists
 
