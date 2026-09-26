@@ -1,0 +1,18 @@
+{
+  "name": "vehicle-marketplace-study",
+  "private": true,
+  "packageManager": "pnpm@10.26.0",
+  "scripts": {
+    "anvil": "anvil --chain-id 31337",
+    "contracts:build": "pnpm --dir packages/contracts build",
+    "contracts:test": "pnpm --dir packages/contracts test",
+    "contracts:deploy": "pnpm --dir packages/contracts run deploy",
+    "dev": "pnpm --dir apps/web dev",
+    "typecheck": "pnpm --dir apps/web typecheck",
+    "lint": "pnpm --dir apps/web lint",
+    "build": "pnpm --dir apps/web build"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.6.1"
+  }
+}
