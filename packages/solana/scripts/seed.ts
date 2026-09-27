@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Connection, LAMPORTS_PER_SOL, sendAndConfirmTransaction, Transaction } from '@solana/web3.js';
 import { createMint, getAccount, getMint, getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
-import { FEE_RECIPIENT, listVehicleInstruction, listingAddress, PROGRAM_ID } from '../src/client.js';
+import { decodeMarketConfig, FEE_RECIPIENT, initializeMarketInstruction, listVehicleInstruction, listingAddress, marketConfigAddress, PROGRAM_ID } from '../src/client.js';
 import { buyer, feeRecipient, payer, paymentMintKey, seller, vehicleMintKey } from './local-keys.js';
 
 const connection = new Connection(process.env.SOLANA_RPC_URL ?? 'http://127.0.0.1:8899', 'confirmed');
@@ -23,6 +23,12 @@ async function main() {
   const paymentMint = paymentMintKey.publicKey;
   if (!await connection.getAccountInfo(vehicleMint)) await createMint(connection, payer, payer.publicKey, null, 0, vehicleMintKey);
   if (!await connection.getAccountInfo(paymentMint)) await createMint(connection, payer, payer.publicKey, null, 6, paymentMintKey);
+  const config = await connection.getAccountInfo(marketConfigAddress());
+  if (!config) {
+    await sendAndConfirmTransaction(connection, new Transaction().add(initializeMarketInstruction(feeRecipient.publicKey, paymentMint)), [payer, feeRecipient], { commitment: 'confirmed' });
+  } else if (!decodeMarketConfig(config.data).paymentMint.equals(paymentMint)) {
+    throw new Error('Marketplace payment mint differs from the local seed mint. Use the configured deployment; do not relabel another token as mUSDC.');
+  }
 
   const sellerVehicle = await getOrCreateAssociatedTokenAccount(connection, payer, vehicleMint, seller.publicKey);
   const buyerPayment = await getOrCreateAssociatedTokenAccount(connection, payer, paymentMint, buyer.publicKey);

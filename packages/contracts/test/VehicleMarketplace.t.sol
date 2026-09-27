@@ -32,10 +32,11 @@ contract VehicleMarketplaceTest is Test {
 
     function testSellerCanListApprovedNft() public {
         _approveAndList();
-        (address listedSeller, uint256 listedPrice, bool active) = market.listings(1);
+        (address listedSeller, uint256 listedPrice, bool active, uint256 version) = market.listings(1);
         assertEq(listedSeller, seller);
         assertEq(listedPrice, PRICE);
         assertTrue(active);
+        assertEq(version, 1);
     }
 
     function testNonOwnerCannotList() public {
@@ -54,8 +55,9 @@ contract VehicleMarketplaceTest is Test {
         _approveAndList();
         vm.prank(seller);
         market.cancelListing(1);
-        (,, bool active) = market.listings(1);
+        (,, bool active, uint256 version) = market.listings(1);
         assertFalse(active);
+        assertEq(version, 1);
     }
 
     function testInsufficientBalanceCannotBuy() public {
@@ -65,8 +67,8 @@ contract VehicleMarketplaceTest is Test {
         usdc.approve(address(market), PRICE);
         vm.prank(poorBuyer);
         vm.expectRevert();
-        market.buyVehicle(1);
-        (,, bool active) = market.listings(1);
+        market.buyVehicle(1, 1, PRICE);
+        (,, bool active,) = market.listings(1);
         assertTrue(active);
     }
 
@@ -74,7 +76,7 @@ contract VehicleMarketplaceTest is Test {
         _approveAndList();
         vm.prank(buyer);
         vm.expectRevert();
-        market.buyVehicle(1);
+        market.buyVehicle(1, 1, PRICE);
         assertEq(nft.ownerOf(1), seller);
     }
 
@@ -84,16 +86,17 @@ contract VehicleMarketplaceTest is Test {
         usdc.approve(address(market), PRICE);
 
         vm.expectEmit(true, true, true, true);
-        emit VehicleMarketplace.VehiclePurchased(seller, buyer, 1, PRICE, 25 * 1e6);
+        emit VehicleMarketplace.VehiclePurchased(seller, buyer, 1, PRICE, 25 * 1e6, 1);
         vm.prank(buyer);
-        market.buyVehicle(1);
+        market.buyVehicle(1, 1, PRICE + 1);
 
         assertEq(usdc.balanceOf(seller), 975 * 1e6);
         assertEq(usdc.balanceOf(feeRecipient), 25 * 1e6);
         assertEq(usdc.balanceOf(buyer), 0);
         assertEq(nft.ownerOf(1), buyer);
-        (,, bool active) = market.listings(1);
+        (,, bool active, uint256 version) = market.listings(1);
         assertFalse(active);
+        assertEq(version, 1);
     }
 
     function testCannotPurchaseTwice() public {
@@ -101,10 +104,10 @@ contract VehicleMarketplaceTest is Test {
         vm.prank(buyer);
         usdc.approve(address(market), PRICE);
         vm.prank(buyer);
-        market.buyVehicle(1);
+        market.buyVehicle(1, 1, PRICE);
         vm.prank(buyer);
         vm.expectRevert(VehicleMarketplace.ListingNotActive.selector);
-        market.buyVehicle(1);
+        market.buyVehicle(1, 1, PRICE);
     }
 
     function testRevokedApprovalMakesListingUnbuyable() public {
@@ -115,7 +118,7 @@ contract VehicleMarketplaceTest is Test {
         usdc.approve(address(market), PRICE);
         vm.prank(buyer);
         vm.expectRevert(VehicleMarketplace.NftNotApproved.selector);
-        market.buyVehicle(1);
+        market.buyVehicle(1, 1, PRICE);
     }
 
     function testNewOwnerCanReplaceStaleListing() public {
@@ -126,8 +129,71 @@ contract VehicleMarketplaceTest is Test {
         nft.approve(address(market), 1);
         vm.prank(buyer);
         market.listVehicle(1, PRICE);
-        (address listedSeller,, bool active) = market.listings(1);
+        (address listedSeller,, bool active, uint256 version) = market.listings(1);
         assertEq(listedSeller, buyer);
         assertTrue(active);
+        assertEq(version, 2);
+    }
+
+    function testSamePriceRelistingRejectsReviewedVersion() public {
+        _approveAndList();
+        (,,, uint256 reviewedVersion) = market.listings(1);
+        vm.prank(buyer);
+        usdc.approve(address(market), type(uint256).max);
+        vm.prank(seller);
+        market.cancelListing(1);
+        vm.prank(seller);
+        market.listVehicle(1, PRICE);
+        (,,, uint256 newVersion) = market.listings(1);
+        assertEq(newVersion, reviewedVersion + 1);
+
+        vm.prank(buyer);
+        vm.expectRevert(VehicleMarketplace.ListingVersionMismatch.selector);
+        market.buyVehicle(1, reviewedVersion, PRICE);
+        assertEq(nft.ownerOf(1), seller);
+        assertEq(usdc.balanceOf(buyer), PRICE);
+    }
+
+    function testHigherPriceRelistingRejectsOldIntentEvenWithUnlimitedAllowance() public {
+        _approveAndList();
+        usdc.mint(buyer, PRICE);
+        vm.prank(buyer);
+        usdc.approve(address(market), type(uint256).max);
+        vm.prank(seller);
+        market.cancelListing(1);
+        vm.prank(seller);
+        market.listVehicle(1, PRICE * 3 / 2);
+        vm.prank(buyer);
+        vm.expectRevert(VehicleMarketplace.ListingVersionMismatch.selector);
+        market.buyVehicle(1, 1, PRICE);
+
+        // The cap is independently enforced, even with the new version.
+        vm.prank(buyer);
+        vm.expectRevert(VehicleMarketplace.PriceExceedsMaximum.selector);
+        market.buyVehicle(1, 2, PRICE);
+        assertEq(usdc.balanceOf(buyer), PRICE * 2);
+    }
+
+    function testCurrentVersionRejectsMaximumBelowPrice() public {
+        _approveAndList();
+        vm.prank(buyer);
+        usdc.approve(address(market), type(uint256).max);
+        vm.prank(buyer);
+        vm.expectRevert(VehicleMarketplace.PriceExceedsMaximum.selector);
+        market.buyVehicle(1, 1, PRICE - 1);
+    }
+
+    function testVersionSurvivesPurchaseAndNewOwnerRelisting() public {
+        _approveAndList();
+        vm.startPrank(buyer);
+        usdc.approve(address(market), PRICE);
+        market.buyVehicle(1, 1, PRICE);
+        nft.approve(address(market), 1);
+        market.listVehicle(1, PRICE);
+        vm.stopPrank();
+        (address newSeller,, bool active, uint256 version) = market.listings(1);
+        assertEq(newSeller, buyer);
+        assertTrue(active);
+        assertEq(version, 2);
     }
 }

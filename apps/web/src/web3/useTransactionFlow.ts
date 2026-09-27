@@ -24,6 +24,7 @@ export function useTransactionFlow() {
     requestWallet: () => Promise<Hash>,
     refreshAffectedQueries: () => Promise<unknown>,
     inspectReceipt?: (receipt: TransactionReceipt) => string | undefined,
+    diagnoseRevert?: (blockNumber: bigint) => Promise<unknown>,
   ) {
     if (!publicClient) {
       setPhase({ stage: 'failed', error: { kind: 'wrong-chain', message: 'Switch to the local Anvil chain.', cause: null } });
@@ -36,7 +37,10 @@ export function useTransactionFlow() {
       hash = await requestWallet();
       setPhase({ stage: 'submitted', hash });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new Error('Transaction was included in a block but reverted.');
+      if (receipt.status !== 'success') {
+        if (diagnoseRevert) await diagnoseRevert(receipt.blockNumber);
+        throw new Error('Transaction was included in a block but reverted.');
+      }
       let detail: string | undefined;
       try { detail = inspectReceipt?.(receipt); }
       catch (cause) { console.error('Receipt event decoding failed', cause); }

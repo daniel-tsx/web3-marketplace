@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { PublicKey } from '@solana/web3.js';
-import { decodeListing, escrowAddress, listingAddress } from '@vehicle/solana';
+import { decodeListing, decodeMarketConfig, escrowAddress, listingAddress, marketConfigAddress, PROGRAM_ID } from '@vehicle/solana';
 
 export const solanaKey = {
   listing: (mint: string) => ['solana', 'listing', mint] as const,
@@ -14,6 +14,14 @@ export function useSolanaVehicleState(vehicleMint: PublicKey, paymentMint: Publi
   const { connection } = useConnection();
   const mint = vehicleMint.toBase58();
   const owner = connected?.toBase58();
+  const config = useQuery({
+    queryKey: ['solana', 'market-config', connection.rpcEndpoint, PROGRAM_ID.toBase58()],
+    queryFn: async () => {
+      const account = await connection.getAccountInfo(marketConfigAddress(), 'confirmed');
+      if (!account || !account.owner.equals(PROGRAM_ID)) throw new Error('Solana marketplace configuration is unavailable. Initialize the payment mint before trading.');
+      return decodeMarketConfig(account.data);
+    },
+  });
   const listing = useQuery({
     queryKey: solanaKey.listing(mint),
     queryFn: async () => {
@@ -37,7 +45,9 @@ export function useSolanaVehicleState(vehicleMint: PublicKey, paymentMint: Publi
     queryKey: solanaKey.token(paymentMint.toBase58(), owner ?? 'disconnected'), enabled: Boolean(owner),
     queryFn: () => tokenBalance(connection, paymentMint, connected!),
   });
-  return { listing, escrow, vehicleBalance, paymentBalance };
+  const paymentMintMatches = config.isSuccess && config.data.paymentMint.equals(paymentMint) &&
+    (!listing.data?.active || listing.data.paymentMint.equals(paymentMint));
+  return { listing, escrow, vehicleBalance, paymentBalance, config, paymentMintMatches };
 }
 
 async function tokenBalance(connection: ReturnType<typeof useConnection>['connection'], mint: PublicKey, owner: PublicKey) {

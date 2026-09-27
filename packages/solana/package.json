@@ -10,6 +10,7 @@
     "deploy": "anchor deploy",
     "seed": "tsx scripts/seed.ts",
     "test:anchor": "tsx --test tests/vehicle-marketplace.test.ts",
+    "test": "tsx --test tests/client.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

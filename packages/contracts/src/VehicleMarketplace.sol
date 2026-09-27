@@ -14,6 +14,7 @@ contract VehicleMarketplace is ReentrancyGuard {
         address seller;
         uint256 price;
         bool active;
+        uint256 version;
     }
 
     IERC721 public immutable vehicleNFT;
@@ -22,10 +23,10 @@ contract VehicleMarketplace is ReentrancyGuard {
     uint16 public immutable feeBps;
     mapping(uint256 tokenId => Listing) public listings;
 
-    event VehicleListed(address indexed seller, uint256 indexed tokenId, uint256 price);
-    event VehicleListingCancelled(address indexed seller, uint256 indexed tokenId);
+    event VehicleListed(address indexed seller, uint256 indexed tokenId, uint256 price, uint256 version);
+    event VehicleListingCancelled(address indexed seller, uint256 indexed tokenId, uint256 version);
     event VehiclePurchased(
-        address indexed seller, address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 fee
+        address indexed seller, address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 fee, uint256 version
     );
 
     error InvalidConfiguration();
@@ -36,6 +37,8 @@ contract VehicleMarketplace is ReentrancyGuard {
     error ListingNotActive();
     error NotListingSeller();
     error SelfPurchase();
+    error ListingVersionMismatch();
+    error PriceExceedsMaximum();
 
     constructor(IERC721 nft, IERC20 token, address recipient, uint16 basisPoints) {
         if (
@@ -55,8 +58,10 @@ contract VehicleMarketplace is ReentrancyGuard {
         // A new owner can replace a stale noncustodial listing left by a prior owner.
         if (listings[tokenId].active && listings[tokenId].seller == msg.sender) revert ListingAlreadyActive();
 
-        listings[tokenId] = Listing({seller: msg.sender, price: price, active: true});
-        emit VehicleListed(msg.sender, tokenId, price);
+        // The stored version survives cancel/purchase; checked arithmetic prevents reuse on overflow.
+        uint256 version = listings[tokenId].version + 1;
+        listings[tokenId] = Listing({seller: msg.sender, price: price, active: true, version: version});
+        emit VehicleListed(msg.sender, tokenId, price, version);
     }
 
     function cancelListing(uint256 tokenId) external {
@@ -64,12 +69,14 @@ contract VehicleMarketplace is ReentrancyGuard {
         if (!listing.active) revert ListingNotActive();
         if (listing.seller != msg.sender) revert NotListingSeller();
         listing.active = false;
-        emit VehicleListingCancelled(msg.sender, tokenId);
+        emit VehicleListingCancelled(msg.sender, tokenId, listing.version);
     }
 
-    function buyVehicle(uint256 tokenId) external nonReentrant {
+    function buyVehicle(uint256 tokenId, uint256 expectedVersion, uint256 maxPrice) external nonReentrant {
         Listing storage listing = listings[tokenId];
         if (!listing.active) revert ListingNotActive();
+        if (listing.version != expectedVersion) revert ListingVersionMismatch();
+        if (listing.price > maxPrice) revert PriceExceedsMaximum();
         address seller = listing.seller;
         if (msg.sender == seller) revert SelfPurchase();
         // A noncustodial listing can go stale after an independent NFT transfer or approval revocation.
@@ -81,7 +88,7 @@ contract VehicleMarketplace is ReentrancyGuard {
         listing.active = false;
         // Emit before external calls so a receiver callback cannot reorder this marketplace log.
         // Any later revert rolls the event back with the whole transaction.
-        emit VehiclePurchased(seller, msg.sender, tokenId, price, fee);
+        emit VehiclePurchased(seller, msg.sender, tokenId, price, fee, listing.version);
 
         paymentToken.safeTransferFrom(msg.sender, seller, price - fee);
         if (fee != 0) paymentToken.safeTransferFrom(msg.sender, feeRecipient, fee);

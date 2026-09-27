@@ -4,7 +4,7 @@ import {
 } from 'viem';
 import { MockUSDCAbi } from '../contracts/abis';
 
-export type Web3ErrorKind = 'rejected' | 'revert' | 'balance' | 'allowance' | 'approval' | 'wrong-chain' | 'network' | 'unknown';
+export type Web3ErrorKind = 'rejected' | 'revert' | 'balance' | 'allowance' | 'approval' | 'wrong-chain' | 'network' | 'stale-listing' | 'unknown';
 export type Web3ActionError = { kind: Web3ErrorKind; message: string; cause: unknown };
 
 export function explainWeb3Error(cause: unknown): Web3ActionError {
@@ -22,6 +22,9 @@ export function explainWeb3Error(cause: unknown): Web3ActionError {
       }
       if (errorName === 'ERC20InsufficientBalance') return { kind: 'balance', message: 'Not enough mUSDC to pay this price.', cause };
       if (errorName === 'ERC20InsufficientAllowance') return { kind: 'allowance', message: 'Marketplace mUSDC allowance is too low.', cause };
+      if (errorName === 'ListingVersionMismatch' || errorName === 'PriceExceedsMaximum' || errorName === 'ListingNotActive' || errorName === 'NotTokenOwner') {
+        return { kind: 'stale-listing', message: 'This listing changed after you reviewed it. Refresh the listing and confirm the new terms.', cause };
+      }
       if (errorName === 'NftNotApproved') return { kind: 'approval', message: 'Marketplace NFT approval is missing or was revoked.', cause };
       return { kind: 'revert', message: reverted.reason || reverted.shortMessage, cause };
     }

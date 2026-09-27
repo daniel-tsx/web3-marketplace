@@ -1001,6 +1001,16 @@ export const VehicleMarketplaceAbi = [
         "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "expectedVersion",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxPrice",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1088,6 +1098,11 @@ export const VehicleMarketplaceAbi = [
         "name": "active",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1139,6 +1154,12 @@ export const VehicleMarketplaceAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1157,6 +1178,12 @@ export const VehicleMarketplaceAbi = [
         "name": "tokenId",
         "type": "uint256",
         "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": false,
         "internalType": "uint256"
       }
     ],
@@ -1195,6 +1222,12 @@ export const VehicleMarketplaceAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1221,6 +1254,11 @@ export const VehicleMarketplaceAbi = [
   },
   {
     "type": "error",
+    "name": "ListingVersionMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NftNotApproved",
     "inputs": []
   },
@@ -1232,6 +1270,11 @@ export const VehicleMarketplaceAbi = [
   {
     "type": "error",
     "name": "NotTokenOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PriceExceedsMaximum",
     "inputs": []
   },
   {

@@ -4,6 +4,7 @@ module vehicle_marketplace::marketplace_tests;
 use std::option;
 use std::string;
 use sui::coin::{Self, Coin, TreasuryCap};
+use sui::object;
 use sui::test_scenario::{Self, Scenario};
 use vehicle_marketplace::marketplace::{Self, Listing, Market};
 use vehicle_marketplace::musdc::{Self, MUSDC};
@@ -177,5 +178,32 @@ fun closed_listing_cannot_be_bought_twice() {
     marketplace::buy(&mut market, &mut listing, payment, scenario.ctx());
     test_scenario::return_shared(market);
     test_scenario::return_shared(listing);
+    scenario.end();
+}
+
+#[test, expected_failure(abort_code = 0, location = vehicle_marketplace::marketplace)]
+fun cancelled_listing_cannot_purchase_relisted_vehicle() {
+    let mut scenario = setup();
+    list(&mut scenario);
+    scenario.next_tx(SELLER);
+    let reviewed_id = {
+        let mut market = scenario.take_shared<Market>();
+        let mut listing = scenario.take_shared<Listing>();
+        let reviewed_id = object::id(&listing);
+        marketplace::cancel(&mut market, &mut listing, scenario.ctx());
+        test_scenario::return_shared(market);
+        test_scenario::return_shared(listing);
+        reviewed_id
+    };
+    // Same seller, Vehicle and price, but a different logical Listing object.
+    list(&mut scenario);
+    scenario.next_tx(BUYER);
+    let mut market = scenario.take_shared<Market>();
+    assert!(*option::borrow(marketplace::current_listing(&market)) != reviewed_id, 10);
+    let mut old_listing = scenario.take_shared_by_id<Listing>(reviewed_id);
+    let payment = scenario.take_from_sender<Coin<MUSDC>>();
+    marketplace::buy(&mut market, &mut old_listing, payment, scenario.ctx());
+    test_scenario::return_shared(market);
+    test_scenario::return_shared(old_listing);
     scenario.end();
 }

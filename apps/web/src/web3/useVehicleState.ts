@@ -41,5 +41,5 @@ export function useVehicleState(tokenId: bigint, account?: Address) {
   });
 
   const approved = nftApproval.data === addresses.marketplace || operatorApproval.data === true;
-  return { owner, listing, nftApproval, operatorApproval, balance, allowance, approved };
+  return { owner, listing, listingVersion: listing.data?.[3], nftApproval, operatorApproval, balance, allowance, approved };
 }

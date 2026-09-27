@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { formatUnits, parseEventLogs, parseUnits, type Address, type TransactionReceipt } from 'viem';
-import { useWriteContract } from 'wagmi';
+import { usePublicClient, useWriteContract } from 'wagmi';
 import { MockUSDCAbi, VehicleMarketplaceAbi, VehicleNFTAbi } from '../contracts/abis';
 import { addresses } from '../contracts/addresses';
 import { localChain } from '../contracts/config';
@@ -16,6 +16,7 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
   const [priceInput, setPriceInput] = useState('1000');
   const queryClient = useQueryClient();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient({ chainId: localChain.id });
   const tx = useTransactionFlow();
   const data = useVehicleState(tokenId, account);
 
@@ -73,17 +74,22 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
   function describePurchase(receipt: TransactionReceipt) {
     const event = parseEventLogs({ abi: VehicleMarketplaceAbi, logs: receipt.logs.filter((log) => sameAddress(log.address, addresses.marketplace)), eventName: 'VehiclePurchased' })[0];
     if (!event) return 'Receipt succeeded; VehiclePurchased event was not found.';
-    return `VehiclePurchased: #${event.args.tokenId}, ${event.args.seller} → ${event.args.buyer}; fee ${money(event.args.fee)}.`;
+    return `VehiclePurchased: #${event.args.tokenId}, version ${event.args.version}, ${event.args.seller} → ${event.args.buyer}; fee ${money(event.args.fee)}.`;
   }
 
   function buyVehicle() {
     if (!executionReady || !account || !active || staleOwner || !data.approved || !price || !buyerReady || sameAddress(account, seller)) return;
     if ((data.balance.data ?? 0n) < price || (data.allowance.data ?? 0n) < price) return;
+    if (data.listingVersion === undefined) return;
+    // Preserve the terms that rendered this Buy action; never silently reread/retry new terms.
+    const args = [tokenId, data.listingVersion, price] as const;
     void tx.run(
-      () => writeContractAsync({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args: [tokenId], account, chainId: localChain.id }),
+      () => writeContractAsync({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args, account, chainId: localChain.id }),
       // Only these reads can change for the currently displayed account/card.
       () => refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey, data.balance.queryKey, data.allowance.queryKey),
       describePurchase,
+      // A mined revert has no error data in its receipt. Replay the same intent for diagnostics only.
+      (blockNumber) => publicClient!.simulateContract({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args, account, blockNumber }),
     );
   }
 
@@ -99,6 +105,7 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
       <dt>Listing</dt><dd>{active ? staleOwner ? 'Stale: NFT changed hands' : 'Active' : 'Inactive'}</dd>
       <dt>Seller</dt><dd><code>{active ? seller : '—'}</code></dd>
       <dt>Price</dt><dd>{active ? money(price) : '—'}</dd>
+      <dt>Listing version</dt><dd>{data.listingVersion?.toString() ?? '—'}</dd>
       <dt>Your balance</dt><dd>{account ? money(data.balance.data) : 'Connect wallet'}</dd>
       <dt>Your allowance</dt><dd>{account ? money(data.allowance.data) : 'Connect wallet'}</dd>
       <dt>Marketplace NFT approval</dt><dd>{data.nftApproval.isSuccess && data.operatorApproval.isSuccess ? data.approved ? 'Approved' : 'Not approved' : 'Loading…'}</dd>
@@ -115,5 +122,6 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
     {canShowBuyerActions && (data.balance.data ?? 0n) >= (price ?? 0n) && (data.allowance.data ?? 0n) >= (price ?? 0n) && <button disabled={tx.busy} onClick={buyVehicle}>Buy vehicle</button>}
     {active && !staleOwner && !data.approved && !ownListing && <p>Seller must restore NFT approval before purchase.</p>}
     <TransactionStatus phase={tx.phase} />
+    {tx.phase.stage === 'failed' && tx.phase.error.kind === 'stale-listing' && <button onClick={() => void refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey)}>Refresh listing and review terms</button>}
   </article>;
 }
