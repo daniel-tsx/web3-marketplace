@@ -3,7 +3,8 @@ import type { Ecosystem, LinkedWallet } from '../execution/resolveExecution';
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export interface Session { userId: string; wallets: LinkedWallet[]; }
-interface Challenge { challengeId: string; message: string; expiresAt: string; }
+export interface Challenge { challengeId: string; message: string; expiresAt: string; }
+export interface LinkChallenge extends Challenge { authorizer: LinkedWallet & { message: string }; }
 
 export class ApiError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
@@ -26,12 +27,20 @@ export async function getSession(): Promise<Session | null> {
   catch (cause) { if (cause instanceof ApiError && cause.code === 'unauthenticated') return null; throw cause; }
 }
 
-export function requestChallenge(ecosystem: Ecosystem, address: string, purpose: 'login' | 'link-wallet') {
-  return request<Challenge>(purpose === 'login' ? '/auth/challenge' : '/wallets/link/challenge', { ecosystem, address });
+export function requestChallenge(ecosystem: Ecosystem, address: string) {
+  return request<Challenge>('/auth/challenge', { ecosystem, address });
 }
 
-export function verifyChallenge(ecosystem: Ecosystem, address: string, signature: string, challengeId: string, purpose: 'login' | 'link-wallet') {
-  return request(purpose === 'login' ? '/auth/verify' : '/wallets/link/verify', { ecosystem, address, signature, challengeId });
+export function verifyChallenge(ecosystem: Ecosystem, address: string, signature: string, challengeId: string) {
+  return request('/auth/verify', { ecosystem, address, signature, challengeId });
+}
+
+export function requestWalletLink(target: LinkedWallet, authorizer: LinkedWallet) {
+  return request<LinkChallenge>('/wallets/link/challenge', { ...target, authorizer });
+}
+
+export function verifyWalletLink(target: LinkedWallet, signature: string, challengeId: string, authorizerSignature: string) {
+  return request('/wallets/link/verify', { ...target, signature, challengeId, authorizerSignature });
 }
 
 export function logout() { return request<{ ok: true }>('/logout', {}); }

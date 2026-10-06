@@ -20,11 +20,13 @@ format, see [AI_WORKFLOW](AI_WORKFLOW.md).
 ## Current project truth
 
 - **Identity and wallet login/linking:** a UUID user and opaque HttpOnly session,
-  with independently signed EVM, Solana, and Sui wallet proofs. Linking needs the
-  existing session and a new proof; connection/account switching does not relink
+  with independently signed EVM, Solana, and Sui wallet proofs. Following H2,
+  linking needs a live originating session plus fresh trusted-wallet authorization
+  and new-wallet ownership proofs for that exact credential change; connection/account switching does not relink
   wallets. Login ecosystem does not select the chain used for a purchase.
 - **API persistence:** Fastify plus Node's synchronous SQLite stores only users,
-  linked wallets, challenges, and hashed session tokens. Startup/database init
+  linked wallets, challenges, hashed session tokens and per-request link authorization
+  context. Startup/database init
   preserves Run 2 identity rows while widening ecosystem constraints for Sui.
 - **EVM:** local Anvil marketplace, ERC-721 vehicles, six-decimal MockUSDC,
   noncustodial listings, NFT approval and ERC-20 allowance, receipt-based results.
@@ -42,7 +44,10 @@ format, see [AI_WORKFLOW](AI_WORKFLOW.md).
   persistent generation + max price and enforces exact payment-mint identity; Sui
   retains the reviewed Listing ID and exact payment construction. No automatic
   retry substitutes newly read terms. [The audit guide](audit-fix-01-purchase-intent.md)
-  owns the detailed fix and breaking local deployment compatibility. H2/H3 are outside this workflow task.
+  owns the detailed fix and breaking local deployment compatibility.
+- **H2:** [Trust boundaries](architecture/trust-boundaries.md) owns sensitive wallet-link authorization;
+  [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the session-bound two-proof protocol.
+  H3 is unchanged.
 
 ## Stack truth
 
@@ -88,7 +93,7 @@ run guides are deeper, scoped references rather than competing current summaries
 | API persistence | [Database](../apps/api/src/db.ts), [startup](../apps/api/src/index.ts), [init](../apps/api/src/init-db.ts), [tests](../apps/api/src/server.test.ts) | [Trust boundaries](architecture/trust-boundaries.md); [Run 3 migration](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | SQLite owns identity only; no listings, balances, custody, or settlement. |
 | Environment/configuration | [EVM config](../apps/web/src/contracts/config.ts), [addresses](../apps/web/src/contracts/addresses.ts), [Sui config](../apps/web/src/web3/sui/config.ts), [bootstrap](../apps/web/src/bootstrap.tsx), [API startup](../apps/api/src/index.ts), [address sync](../scripts/sync-addresses.mjs), [Solana seed](../packages/solana/scripts/seed.ts), [Anchor config](../packages/solana/Anchor.toml) | [Verification/setup notes](operations/verification.md#local-setup-boundaries); root README and run setup sections | Public browser config only; EVM/Solana scripts target local chains; Sui needs an explicit deployment. |
 | Verification/tests | [Root scripts](../package.json), workspace manifests above, [contracts](../packages/contracts/test/), [API](../apps/api/src/server.test.ts), [frontend](../apps/web/package.json), [Solana](../packages/solana/tests/), [Sui](../packages/sui/tests/), [Move](../packages/sui/move/tests/) | [Verification](operations/verification.md) | Distinguish offline, compiler, runtime, and actual wallet evidence. |
-| Audit fixes | Chain sources/clients above, [purchase errors/tests](../apps/web/src/web3/purchaseIntent.test.ts), [EVM errors](../apps/web/src/web3/errors.ts), [Solana errors](../apps/web/src/web3/solana/errors.ts) | [H1 audit fix](audit-fix-01-purchase-intent.md) | Current scope is H1; preserve intent and compatibility limits. |
+| Audit fixes | Chain sources/clients above, [purchase errors/tests](../apps/web/src/web3/purchaseIntent.test.ts), [wallet-link tests](../apps/api/src/wallet-link.test.ts) | [H1 audit fix](audit-fix-01-purchase-intent.md), [H2 implementation](audit-fix-02-wallet-link-reauthentication.md) | Preserve purchase intent and sensitive credential-change authorization. H3 is unchanged. |
 
 ## Known documentation drift
 
@@ -106,6 +111,8 @@ Use this map and H1 when interpreting them:
 - [Run 3](run-03-sui-multichain.md) omits the `executed` phase that
   `useSuiTransaction.ts` uses when wallet execution succeeds but subsequent
   transaction reads fail. See [the result boundary](architecture/trust-boundaries.md#transaction-results-and-partial-failures).
+- Run 2/3's original wallet-link traces predate H2. Use [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence)
+  and [the H2 protocol](audit-fix-02-wallet-link-reauthentication.md) for the required trusted-wallet and target-wallet proofs.
 - The [Solana seed](../packages/solana/scripts/seed.ts) writes
   `VITE_SOLANA_PROGRAM_ID`, but [the client](../packages/solana/src/client.ts) uses
   hardcoded `PROGRAM_ID`; no frontend code reads that variable. It does not

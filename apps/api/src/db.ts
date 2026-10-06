@@ -18,6 +18,14 @@ export interface Challenge {
 
 export interface WalletRow { ecosystem: Ecosystem; address: string; }
 
+export interface WalletLinkRequest {
+  challenge_id: string;
+  session_id: string;
+  authorizer_ecosystem: Ecosystem;
+  authorizer_address: string;
+  authorization_message: string;
+}
+
 export function openDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
@@ -77,6 +85,17 @@ export function openDatabase(path: string) {
       `);
       db.exec('PRAGMA user_version = 3; COMMIT');
     } catch (cause) { db.exec('ROLLBACK'); throw cause; }
-  } else db.exec('PRAGMA user_version = 3');
+  }
+  // Additive H2 state: existing users, wallets, sessions and challenges stay intact.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wallet_link_requests (
+      challenge_id TEXT PRIMARY KEY REFERENCES auth_challenges(id),
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      authorizer_ecosystem TEXT NOT NULL CHECK(authorizer_ecosystem IN ('evm','solana','sui')),
+      authorizer_address TEXT NOT NULL, authorization_message TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS wallet_link_sessions_idx ON wallet_link_requests(session_id);
+    PRAGMA user_version = 4;
+  `);
   return db;
 }

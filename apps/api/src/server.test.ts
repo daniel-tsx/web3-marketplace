@@ -76,19 +76,20 @@ test('linking requires session and proof; a wallet cannot belong to two users', 
     const userA = await login(evmA);
     const cookieA = userA.headers['set-cookie'] as string;
     const address = solA.publicKey.toBase58();
-    const challenge = (await post('/wallets/link/challenge', { ecosystem: 'solana', address }, cookieA)).json();
+    const challenge = (await post('/wallets/link/challenge', { ecosystem: 'solana', address, authorizer: { ecosystem: 'evm', address: evmA.address } }, cookieA)).json();
+    const authorizerSignature = await evmA.signMessage({ message: challenge.authorizer.message });
     assert.match(challenge.message, /Purpose: link-wallet/);
-    const invalid = await post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'solana', address, signature: Buffer.from(nacl.sign.detached(new TextEncoder().encode(challenge.message), solB.secretKey)).toString('base64') }, cookieA);
+    const invalid = await post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'solana', address, signature: Buffer.from(nacl.sign.detached(new TextEncoder().encode(challenge.message), solB.secretKey)).toString('base64'), authorizerSignature }, cookieA);
     assert.equal(invalid.json().error.code, 'invalid_signature');
     const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(challenge.message), solA.secretKey)).toString('base64');
-    assert.equal((await post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'solana', address, signature }, cookieA)).statusCode, 200);
+    assert.equal((await post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'solana', address, signature, authorizerSignature }, cookieA)).statusCode, 200);
     const meA = (await app.inject({ method: 'GET', url: '/me', headers: { cookie: cookieA } })).json();
     assert.equal(meA.wallets.length, 2);
     assert.equal(meA.userId, userA.json().userId);
     const userB = await login(evmB);
     const cookieB = userB.headers['set-cookie'] as string;
-    const conflict = (await post('/wallets/link/challenge', { ecosystem: 'solana', address }, cookieB)).json();
-    const response = await post('/wallets/link/verify', { challengeId: conflict.challengeId, ecosystem: 'solana', address, signature: Buffer.from(nacl.sign.detached(new TextEncoder().encode(conflict.message), solA.secretKey)).toString('base64') }, cookieB);
+    const conflict = (await post('/wallets/link/challenge', { ecosystem: 'solana', address, authorizer: { ecosystem: 'evm', address: evmB.address } }, cookieB)).json();
+    const response = await post('/wallets/link/verify', { challengeId: conflict.challengeId, ecosystem: 'solana', address, signature: Buffer.from(nacl.sign.detached(new TextEncoder().encode(conflict.message), solA.secretKey)).toString('base64'), authorizerSignature: await evmB.signMessage({ message: conflict.authorizer.message }) }, cookieB);
     assert.equal(response.json().error.code, 'wallet_owned');
     const noOrigin = await app.inject({ method: 'POST', url: '/auth/challenge', payload: { ecosystem: 'evm', address: evmA.address } });
     assert.equal(noOrigin.statusCode, 403);
@@ -105,9 +106,9 @@ test('Solana login links an EVM wallet to the same application user', async () =
     const login = await post('/auth/verify', { challengeId: loginChallenge.challengeId, ecosystem: 'solana', address: solanaAddress, signature: solanaSignature });
     assert.equal(login.statusCode, 200);
     const cookie = login.headers['set-cookie'] as string;
-    const linkChallenge = (await post('/wallets/link/challenge', { ecosystem: 'evm', address: evmA.address }, cookie)).json();
+    const linkChallenge = (await post('/wallets/link/challenge', { ecosystem: 'evm', address: evmA.address, authorizer: { ecosystem: 'solana', address: solanaAddress } }, cookie)).json();
     const evmSignature = await evmA.signMessage({ message: linkChallenge.message });
-    const link = await post('/wallets/link/verify', { challengeId: linkChallenge.challengeId, ecosystem: 'evm', address: evmA.address, signature: evmSignature }, cookie);
+    const link = await post('/wallets/link/verify', { challengeId: linkChallenge.challengeId, ecosystem: 'evm', address: evmA.address, signature: evmSignature, authorizerSignature: Buffer.from(nacl.sign.detached(new TextEncoder().encode(linkChallenge.authorizer.message), solB.secretKey)).toString('base64') }, cookie);
     assert.equal(link.statusCode, 200);
     const me = (await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).json();
     assert.equal(me.userId, login.json().userId);
@@ -129,8 +130,8 @@ test('Sui login verifies exact personal message, rejects replay, and can link EV
     assert.equal(login.statusCode, 200);
     assert.equal((await post('/auth/verify', { challengeId: challenge.challengeId, ecosystem: 'sui', address, signature: signed.signature })).json().error.code, 'challenge_used');
     const cookie = login.headers['set-cookie'] as string;
-    const linkChallenge = (await post('/wallets/link/challenge', { ecosystem: 'evm', address: evmA.address }, cookie)).json();
-    const link = await post('/wallets/link/verify', { challengeId: linkChallenge.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: linkChallenge.message }) }, cookie);
+    const linkChallenge = (await post('/wallets/link/challenge', { ecosystem: 'evm', address: evmA.address, authorizer: { ecosystem: 'sui', address } }, cookie)).json();
+    const link = await post('/wallets/link/verify', { challengeId: linkChallenge.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: linkChallenge.message }), authorizerSignature: (await suiA.signPersonalMessage(new TextEncoder().encode(linkChallenge.authorizer.message))).signature }, cookie);
     assert.equal(link.statusCode, 200);
     const me = (await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).json();
     assert.equal(me.userId, login.json().userId);
@@ -145,21 +146,21 @@ test('EVM session links Sui once; another user cannot claim it', async () => {
     const challenge = (await post('/auth/challenge', { ecosystem: 'evm', address: account.address })).json();
     return post('/auth/verify', { challengeId: challenge.challengeId, ecosystem: 'evm', address: account.address, signature: await account.signMessage({ message: challenge.message }) });
   }
-  async function link(cookie: string) {
+  async function link(cookie: string, authorizer: typeof evmA) {
     const address = suiB.toSuiAddress();
-    const challenge = (await post('/wallets/link/challenge', { ecosystem: 'sui', address }, cookie)).json();
+    const challenge = (await post('/wallets/link/challenge', { ecosystem: 'sui', address, authorizer: { ecosystem: 'evm', address: authorizer.address } }, cookie)).json();
     const { signature } = await suiB.signPersonalMessage(new TextEncoder().encode(challenge.message));
-    return post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'sui', address, signature }, cookie);
+    return post('/wallets/link/verify', { challengeId: challenge.challengeId, ecosystem: 'sui', address, signature, authorizerSignature: await authorizer.signMessage({ message: challenge.authorizer.message }) }, cookie);
   }
   try {
     const userA = await login(evmA);
     const cookieA = userA.headers['set-cookie'] as string;
-    assert.equal((await link(cookieA)).statusCode, 200);
+    assert.equal((await link(cookieA, evmA)).statusCode, 200);
     const me = (await app.inject({ method: 'GET', url: '/me', headers: { cookie: cookieA } })).json();
     assert.equal(me.userId, userA.json().userId);
     assert.equal(me.wallets.find((wallet: { ecosystem: string }) => wallet.ecosystem === 'sui').address, suiB.toSuiAddress());
     const userB = await login(evmB);
-    assert.equal((await link(userB.headers['set-cookie'] as string)).json().error.code, 'wallet_owned');
+    assert.equal((await link(userB.headers['set-cookie'] as string, evmB)).json().error.code, 'wallet_owned');
   } finally { await app.close(); }
 });
 
@@ -179,7 +180,7 @@ test('Run 2 SQLite identity rows migrate without a reset', () => {
     `);
     old.close();
     const migrated = openDatabase(path);
-    assert.equal((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 3);
+    assert.equal((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 4);
     assert.equal((migrated.prepare('SELECT address FROM wallets WHERE id = ?').get('w') as { address: string }).address, '0xabc');
     assert.equal((migrated.prepare('SELECT user_id FROM sessions WHERE id = ?').get('s') as { user_id: string }).user_id, 'u');
     migrated.prepare("INSERT INTO wallets VALUES ('new','u','sui',?,2,2)").run(suiA.toSuiAddress());

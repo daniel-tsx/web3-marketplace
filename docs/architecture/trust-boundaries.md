@@ -28,6 +28,15 @@ binds the stored challenge to the current session user. Challenge consumption an
 identity writes occur in an SQLite transaction. A unique ecosystem/address pair
 prevents a wallet belonging to two users.
 
+Wallet linking additionally requires fresh authorization from an already-linked
+wallet and fresh ownership proof from the new wallet. Both messages bind the
+exact target, approving wallet, user, originating session, Origin, purpose,
+nonce and expiry. Session validity, trusted-wallet membership and expiry are
+rechecked after signature verification, at the atomic link/consumption boundary.
+A stolen session alone cannot add a persistent login credential. The
+[H2 implementation record](../audit-fix-02-wallet-link-reauthentication.md) describes
+the two-proof protocol, failure semantics and backward compatibility.
+
 Proofs remain ecosystem-specific: Viem for EVM messages, detached Ed25519 for
 Solana, Mysten personal-message verification for Sui. EVM is lowercase-normalized,
 Solana base58 comparisons remain case-sensitive, and Sui addresses are canonicalized.

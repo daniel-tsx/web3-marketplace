@@ -16,6 +16,7 @@ truth and source paths; follow [AGENTS.md](../AGENTS.md) for behavioral policy.
 | Identity, custody, authorization and result boundaries | [Trust boundaries](architecture/trust-boundaries.md) |
 | Verification commands, prerequisites and host limitations | [Verification](operations/verification.md) |
 | H1 intent invariant and deployment compatibility | [Audit fix 01](audit-fix-01-purchase-intent.md) |
+| H2 credential-change invariant | [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence); [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the implementation. |
 
 The root [README](../README.md) remains the human quick start. The run guides below
 own detailed explanations within their run/chain scope; current cross-cutting docs
@@ -43,7 +44,8 @@ and tests are linked in [the source-of-truth map](AGENT_START_HERE.md#source-of-
 | [Run 01: EVM baseline](run-01-evm-baseline.md) | **historical** baseline. Deep EVM transaction/state reference; its whole-app and future-work descriptions predate Runs 2/3 and its buy trace predates H1. |
 | [Run 02: identity and Solana](run-02-auth-solana-multichain.md) | **shipped** implementation reference, with Anchor runtime **unverified**. Identity/Solana details remain useful; its two-chain overview is extended by Run 3 and listing semantics by H1. |
 | [Run 03: Sui and three chains](run-03-sui-multichain.md) | **shipped** implementation reference, with Move build/runtime, deployment and wallet flow **unverified**. Includes Sui setup, objects, proofs and identity migration. |
-| [Audit fix 01: purchase intent](audit-fix-01-purchase-intent.md) | **current** H1 source of truth. EVM runtime/TypeScript passes are recorded there; Anchor/Move remain unverified. H2/H3 are unchanged. |
+| [Audit fix 01: purchase intent](audit-fix-01-purchase-intent.md) | **current** H1 source of truth. EVM runtime/TypeScript passes are recorded there; Anchor/Move remain unverified. |
+| [Audit fix 02: wallet-linking reauthentication](audit-fix-02-wallet-link-reauthentication.md) | **shipped** H2 implementation record. Requires a live session and fresh trusted/new-wallet proofs. Browser-wallet interaction remains unverified; H3 is unchanged. |
 
 Here **shipped** means present in repository code, not deployed or production-ready.
 The index classifies these documents without rewriting their original status text.

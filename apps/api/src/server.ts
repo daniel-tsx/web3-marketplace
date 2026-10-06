@@ -8,7 +8,7 @@ import nacl from 'tweetnacl';
 import { getAddress, isAddress, verifyMessage } from 'viem';
 import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
 import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
-import { type Challenge, type Ecosystem, type Purpose, type WalletRow } from './db.js';
+import { type Challenge, type Ecosystem, type Purpose, type WalletLinkRequest, type WalletRow } from './db.js';
 
 const CHALLENGE_MS = 5 * 60_000;
 const SESSION_MS = 7 * 24 * 60 * 60_000;
@@ -28,6 +28,18 @@ function decodeSignature(signature: string): Uint8Array | null {
   return bytes.length === 64 && bytes.toString('base64') === signature ? bytes : null;
 }
 
+async function verifyWalletSignature(ecosystem: Ecosystem, address: string, message: string, signature: string): Promise<boolean> {
+  try {
+    if (ecosystem === 'evm') return await verifyMessage({ address: address as `0x${string}`, message, signature: signature as `0x${string}` });
+    if (ecosystem === 'sui') {
+      await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, { address });
+      return true;
+    }
+    const bytes = decodeSignature(signature);
+    return Boolean(bytes && nacl.sign.detached.verify(new TextEncoder().encode(message), bytes, new PublicKey(address).toBytes()));
+  } catch { return false; }
+}
+
 export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://localhost:5173') {
   const app = Fastify({ logger: false, bodyLimit: 16_384 });
   await app.register(cookie);
@@ -42,29 +54,57 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
 
   function currentUser(token?: string) {
     if (!token) return null;
-    return db.prepare('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?')
-      .get(hash(token), Date.now()) as { user_id: string } | undefined ?? null;
+    return db.prepare('SELECT id, user_id FROM sessions WHERE token_hash = ? AND expires_at > ?')
+      .get(hash(token), Date.now()) as { id: string; user_id: string } | undefined ?? null;
   }
 
-  function issueChallenge(ecosystem: unknown, address: unknown, purpose: Purpose, userId: string | null) {
+  function issueChallenge(ecosystem: unknown, address: unknown, purpose: Purpose, userId: string | null, link?: { sessionId: string; authorizer: WalletRow }) {
     if ((ecosystem !== 'evm' && ecosystem !== 'solana' && ecosystem !== 'sui') || typeof address !== 'string') return null;
     const normalized = normalizeAddress(ecosystem, address);
     if (!normalized) return null;
     const id = randomUUID();
     const now = Date.now();
     const expires = now + CHALLENGE_MS;
+    const nonce = randomBytes(24).toString('hex');
+    const binding = link ? [
+      `Application User: ${userId}`,
+      `Session: ${link.sessionId}`,
+      `Trusted Wallet: ${link.authorizer.ecosystem} ${link.authorizer.address}`,
+      `New Wallet: ${ecosystem} ${normalized}`,
+      `Link Request: ${id}`,
+    ] : [];
     const message = [
-      'Vehicle Marketplace local authentication',
+      link ? 'Vehicle Marketplace wallet linking' : 'Vehicle Marketplace local authentication',
       `Origin: ${frontendOrigin}`,
       `Ecosystem: ${ecosystem}`,
       `Address: ${normalized}`,
       `Purpose: ${purpose}`,
-      `Nonce: ${randomBytes(24).toString('hex')}`,
+      ...binding,
+      ...(link ? ['Proof: new-wallet-ownership', 'This wallet will become a login credential for the application user above.'] : []),
+      `Nonce: ${nonce}`,
       `Issued At: ${new Date(now).toISOString()}`,
       `Expires At: ${new Date(expires).toISOString()}`,
     ].join('\n');
     db.prepare('INSERT INTO auth_challenges (id, ecosystem, address, purpose, user_id, message, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, ecosystem, normalized, purpose, userId, message, expires);
+    if (link) {
+      const authorizationMessage = [
+        'Vehicle Marketplace wallet linking',
+        `Origin: ${frontendOrigin}`,
+        `Ecosystem: ${link.authorizer.ecosystem}`,
+        `Address: ${link.authorizer.address}`,
+        'Purpose: link-wallet',
+        ...binding,
+        'Proof: authorize-new-login-wallet',
+        'Approve adding exactly the New Wallet above as a login credential to your application account.',
+        `Nonce: ${nonce}`,
+        `Issued At: ${new Date(now).toISOString()}`,
+        `Expires At: ${new Date(expires).toISOString()}`,
+      ].join('\n');
+      db.prepare('INSERT INTO wallet_link_requests (challenge_id, session_id, authorizer_ecosystem, authorizer_address, authorization_message) VALUES (?, ?, ?, ?, ?)')
+        .run(id, link.sessionId, link.authorizer.ecosystem, link.authorizer.address, authorizationMessage);
+      return { challengeId: id, message, expiresAt: new Date(expires).toISOString(), authorizer: { ...link.authorizer, message: authorizationMessage } };
+    }
     return { challengeId: id, message, expiresAt: new Date(expires).toISOString() };
   }
 
@@ -78,18 +118,7 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
       return { failure: error('invalid_challenge', 'Challenge does not match this wallet and request.'), status: 400 };
     if (challenge.consumed_at !== null) return { failure: error('challenge_used', 'This challenge has already been used.'), status: 409 };
     if (challenge.expires_at <= Date.now()) return { failure: error('challenge_expired', 'This challenge has expired.'), status: 410 };
-    let valid = false;
-    try {
-      if (ecosystem === 'evm') {
-        valid = await verifyMessage({ address: normalized as `0x${string}`, message: challenge.message, signature: signature as `0x${string}` });
-      } else if (ecosystem === 'sui') {
-        await verifyPersonalMessageSignature(new TextEncoder().encode(challenge.message), signature, { address: normalized });
-        valid = true;
-      } else {
-        const bytes = decodeSignature(signature);
-        valid = Boolean(bytes && nacl.sign.detached.verify(new TextEncoder().encode(challenge.message), bytes, new PublicKey(normalized).toBytes()));
-      }
-    } catch { valid = false; }
+    const valid = await verifyWalletSignature(ecosystem, normalized, challenge.message, signature);
     if (!valid) return { failure: error('invalid_signature', 'Wallet signature did not verify.'), status: 401 };
     return { challenge, normalized, ecosystem };
   }
@@ -141,21 +170,44 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
   app.post('/wallets/link/challenge', async (request, reply) => {
     const user = currentUser(request.cookies[COOKIE]);
     if (!user) return reply.code(401).send(error('unauthenticated', 'Log in before linking a wallet.'));
-    const body = request.body as { ecosystem?: unknown; address?: unknown } | null;
-    const result = issueChallenge(body?.ecosystem, body?.address, 'link-wallet', user.user_id);
-    return result ?? reply.code(400).send(error('invalid_wallet', 'Provide a valid ecosystem and wallet address.'));
+    const body = request.body as { ecosystem?: unknown; address?: unknown; authorizer?: { ecosystem?: unknown; address?: unknown } } | null;
+    const authorizer = body?.authorizer;
+    if (!authorizer || (authorizer.ecosystem !== 'evm' && authorizer.ecosystem !== 'solana' && authorizer.ecosystem !== 'sui') || typeof authorizer.address !== 'string')
+      return reply.code(400).send(error('reauthentication_required', 'Choose an already-linked wallet to authorize this credential change.'));
+    const address = normalizeAddress(authorizer.ecosystem, authorizer.address);
+    if (!address || !db.prepare('SELECT id FROM wallets WHERE user_id = ? AND ecosystem = ? AND address = ?').get(user.user_id, authorizer.ecosystem, address))
+      return reply.code(403).send(error('untrusted_wallet', 'The approving wallet must already belong to this application user.'));
+    try {
+      db.exec('BEGIN IMMEDIATE');
+      const result = issueChallenge(body?.ecosystem, body?.address, 'link-wallet', user.user_id, { sessionId: user.id, authorizer: { ecosystem: authorizer.ecosystem, address } });
+      db.exec('COMMIT');
+      return result ?? reply.code(400).send(error('invalid_wallet', 'Provide a valid ecosystem and wallet address.'));
+    } catch (cause) { db.exec('ROLLBACK'); throw cause; }
   });
 
   app.post('/wallets/link/verify', async (request, reply) => {
     const user = currentUser(request.cookies[COOKIE]);
     if (!user) return reply.code(401).send(error('unauthenticated', 'Log in before linking a wallet.'));
-    const body = request.body as { challengeId?: unknown; ecosystem?: unknown; address?: unknown; signature?: unknown } | null;
+    const body = request.body as { challengeId?: unknown; ecosystem?: unknown; address?: unknown; signature?: unknown; authorizerSignature?: unknown } | null;
+    if (typeof body?.challengeId !== 'string') return reply.code(400).send(error('invalid_request', 'Invalid verification request.'));
+    const link = db.prepare('SELECT * FROM wallet_link_requests WHERE challenge_id = ?').get(body.challengeId) as WalletLinkRequest | undefined;
+    // Pre-H2 challenges and a new-wallet proof alone cannot authorize credential changes.
+    if (!link || typeof body.authorizerSignature !== 'string') return reply.code(400).send(error('reauthentication_required', 'A fresh signature from an already-linked wallet is required.'));
+    if (link.session_id !== user.id) return reply.code(403).send(error('invalid_link_session', 'This link request belongs to a different session. Start linking again.'));
     const result = await verifyChallenge(body?.challengeId, body?.ecosystem, body?.address, body?.signature, 'link-wallet', user.user_id);
     if ('failure' in result) return reply.code(result.status ?? 400).send(result.failure);
+    if (!await verifyWalletSignature(link.authorizer_ecosystem, link.authorizer_address, link.authorization_message, body.authorizerSignature))
+      return reply.code(401).send(error('invalid_reauthentication', 'The already-linked wallet did not authorize this link request.'));
     const { challenge, normalized, ecosystem } = result;
-    const now = Date.now();
     try {
       db.exec('BEGIN IMMEDIATE');
+      const now = Date.now();
+      // Signature verification yields: logout, expiry, or revocation may have occurred meanwhile.
+      const liveSession = currentUser(request.cookies[COOKIE]);
+      if (!liveSession || liveSession.id !== link.session_id || liveSession.user_id !== user.user_id) throw new Error('invalid_link_session');
+      if (!db.prepare('SELECT id FROM wallets WHERE user_id = ? AND ecosystem = ? AND address = ?').get(user.user_id, link.authorizer_ecosystem, link.authorizer_address)) throw new Error('untrusted_wallet');
+      const pending = db.prepare('SELECT expires_at FROM auth_challenges WHERE id = ?').get(challenge.id) as { expires_at: number } | undefined;
+      if (!pending || pending.expires_at <= now) throw new Error('challenge_expired');
       const consumed = db.prepare('UPDATE auth_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND expires_at > ?').run(now, challenge.id, now);
       if (consumed.changes !== 1) throw new Error('challenge_used');
       const existing = db.prepare('SELECT user_id FROM wallets WHERE ecosystem = ? AND address = ?').get(ecosystem, normalized) as { user_id: string } | undefined;
@@ -165,6 +217,9 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
       db.exec('COMMIT');
     } catch (cause) {
       db.exec('ROLLBACK');
+      if (cause instanceof Error && cause.message === 'invalid_link_session') return reply.code(401).send(error('invalid_link_session', 'The session is no longer valid. Log in and start linking again.'));
+      if (cause instanceof Error && cause.message === 'untrusted_wallet') return reply.code(403).send(error('untrusted_wallet', 'The approving wallet no longer belongs to this application user.'));
+      if (cause instanceof Error && cause.message === 'challenge_expired') return reply.code(410).send(error('challenge_expired', 'This link request has expired. Start linking again.'));
       if (cause instanceof Error && cause.message === 'wallet_owned') return reply.code(409).send(error('wallet_owned', 'This wallet belongs to another application user.'));
       if (cause instanceof Error && cause.message === 'challenge_used') return reply.code(409).send(error('challenge_used', 'This challenge has already been used.'));
       throw cause;

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "db": "tsx src/init-db.ts",
-    "test": "tsx --test src/server.test.ts",
+    "test": "tsx --test src/server.test.ts src/wallet-link.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   },
