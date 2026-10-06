@@ -1,0 +1,12 @@
+---
+description: Use Command Prompt syntax for this Windows-operated repository
+alwaysApply: true
+---
+
+On Windows, use `cmd.exe` and Command Prompt-compatible commands by default.
+Use PowerShell only when the task requires it. Avoid POSIX environment assignments,
+`export`, and `#` inline comments in executable cmd examples. Use the repository's
+pnpm scripts.
+
+Follow [AGENTS.md](../../AGENTS.md) for shared policy and read
+[AGENT_START_HERE](../../docs/AGENT_START_HERE.md) before non-trivial work.

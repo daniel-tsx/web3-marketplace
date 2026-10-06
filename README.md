@@ -4,6 +4,8 @@ An interview study monorepo for application identity across EVM, Solana, and Sui
 
 Read [the Run 3 implementation guide](docs/run-03-sui-multichain.md) for the Sui setup, object flow, three-chain comparison, and verification limits. [Run 2](docs/run-02-auth-solana-multichain.md) and [Run 1](docs/run-01-evm-baseline.md) remain the detailed Solana and EVM references.
 
+For repository work, start with [AGENTS.md](AGENTS.md) and [the agent context router](docs/AGENT_START_HERE.md). The [documentation index](docs/README.md) selects task-specific references; [AI_WORKFLOW.md](docs/AI_WORKFLOW.md) explains the shared engineering process, and [local verification](docs/operations/verification.md) records command scope and Windows toolchain limits.
+
 ## Requirements
 
 - Node.js 24+ and pnpm 10+
