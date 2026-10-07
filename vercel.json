@@ -29,7 +29,10 @@
       "devCommand": "pnpm dev --port $PORT",
       "outputDirectory": "dist",
       "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
+        {
+          "source": "/((?!assets/|@|.*\\.).*)",
+          "destination": "/index.html"
+        }
       ]
     }
   },

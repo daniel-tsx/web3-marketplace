@@ -49,6 +49,11 @@ Cookies are Secure when the configured frontend origin uses HTTPS; local HTTP
 remains supported. [Vercel deployment](../operations/vercel.md) preserves these
 boundaries through same-origin routing. [PostgreSQL migrations and SQLite cutover](../operations/postgres.md)
 preserve existing identity/session rows; no runtime SQLite fallback remains.
+The origin is exact localhost locally, the exact platform `VERCEL_URL` over HTTPS
+for Preview, or the required canonical `FRONTEND_ORIGIN` for Production. No Host
+or Origin reflection expands trust. Challenges issued for another origin are
+rejected even with shared storage. [The deployment guide](../operations/vercel.md#api-origin-and-cookies)
+owns metadata requirements and the intentional exclusion of Preview aliases.
 
 ## Custody and purchase intent
 

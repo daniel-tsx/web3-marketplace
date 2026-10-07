@@ -40,9 +40,9 @@ async function verifyWalletSignature(ecosystem: Ecosystem, address: string, mess
   } catch { return false; }
 }
 
-export async function buildServer(db: Database, frontendOrigin = 'http://localhost:5173') {
+export async function buildServer(db: Database, frontendOrigin = 'http://localhost:5173', createApp: typeof Fastify = Fastify) {
   const secureCookie = new URL(frontendOrigin).protocol === 'https:';
-  const app = Fastify({ logger: false, bodyLimit: 16_384 });
+  const app = createApp({ logger: false, bodyLimit: 16_384 });
   await app.register(cookie);
   await app.register(cors, { origin: frontendOrigin, credentials: true });
 
@@ -117,7 +117,8 @@ export async function buildServer(db: Database, frontendOrigin = 'http://localho
     const normalized = normalizeAddress(ecosystem, address);
     if (!normalized) return { failure: error('invalid_address', 'Invalid wallet address.'), status: 400 };
     const challenge = (await db.query<Challenge>('SELECT * FROM auth_challenges WHERE id = $1', [challengeId])).rows[0];
-    if (!challenge || challenge.ecosystem !== ecosystem || challenge.address !== normalized || challenge.purpose !== purpose || challenge.user_id !== userId)
+    if (!challenge || challenge.ecosystem !== ecosystem || challenge.address !== normalized || challenge.purpose !== purpose || challenge.user_id !== userId ||
+      !challenge.message.split('\n').includes(`Origin: ${frontendOrigin}`))
       return { failure: error('invalid_challenge', 'Challenge does not match this wallet and request.'), status: 400 };
     if (challenge.consumed_at !== null) return { failure: error('challenge_used', 'This challenge has already been used.'), status: 409 };
     if (challenge.expires_at <= Date.now()) return { failure: error('challenge_expired', 'This challenge has expired.'), status: 410 };

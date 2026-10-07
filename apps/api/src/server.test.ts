@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { createTestDatabase } from './test-db.js';
 import { importSQLite } from './sqlite-import.js';
 import { buildServer } from './server.js';
+import { readFrontendOrigin } from './config.js';
 
 const ORIGIN = 'http://localhost:5173';
 const evmA = privateKeyToAccount('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
@@ -75,6 +76,52 @@ test('HTTPS origin uses secure cookies and rejects other origins', async (t) => 
     assert.match(loggedOut.headers['set-cookie'] as string, /; Secure/);
     assert.equal((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode, 401);
   } finally { await app.close(); }
+});
+
+test('Preview and Production enforce exact origins, HTTPS cookies and session-bound wallet proofs', async (t) => {
+  const { db, connect } = await createTestDatabase(t);
+  const preview = readFrontendOrigin({ VERCEL: '1', VERCEL_ENV: 'preview', VERCEL_URL: 'vehicle-preview-123.vercel.app' });
+  const production = readFrontendOrigin({ VERCEL: '1', VERCEL_ENV: 'production', FRONTEND_ORIGIN: 'https://marketplace.example' });
+  const apps = [await buildServer(db, preview), await buildServer(connect(), production)];
+  t.after(async () => { await Promise.all(apps.map((app) => app.close())); });
+  for (const [index, origin] of [preview, production].entries()) {
+    const app = apps[index];
+    const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, payload, headers: { origin, ...(cookie ? { cookie } : {}) } });
+    for (const foreign of [undefined, 'null', 'http://localhost:5173', 'https://unrelated.vercel.app', 'https://vehicle-git-feature.vercel.app', `${origin}.attacker.example`, index === 0 ? production : preview]) {
+      const rejected = await app.inject({ method: 'POST', url: '/auth/challenge', payload: { ecosystem: 'evm', address: evmA.address }, headers: { ...(foreign ? { origin: foreign } : {}), host: new URL(origin).host, 'x-forwarded-host': new URL(origin).host } });
+      assert.equal(rejected.statusCode, 403);
+      assert.equal(rejected.json().error.code, 'invalid_origin');
+      assert.notEqual(rejected.headers['access-control-allow-origin'], '*');
+    }
+    const preflight = await app.inject({ method: 'OPTIONS', url: '/auth/challenge', headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' } });
+    assert.equal(preflight.statusCode, 204);
+    assert.equal(preflight.headers['access-control-allow-origin'], origin);
+    assert.equal(preflight.headers['access-control-allow-credentials'], 'true');
+    const challenge = (await post('/auth/challenge', { ecosystem: 'evm', address: evmA.address })).json();
+    assert.ok(challenge.message.includes(`Origin: ${origin}\n`));
+    const proof = { ecosystem: 'evm', address: evmA.address, challengeId: challenge.challengeId, signature: await evmA.signMessage({ message: challenge.message }) };
+    // Even a shared Preview database cannot accept a proof issued for another origin.
+    const crossed = await apps[1 - index].inject({ method: 'POST', url: '/auth/verify', payload: proof, headers: { origin: index === 0 ? production : preview } });
+    assert.equal(crossed.statusCode, 400);
+    assert.equal(crossed.json().error.code, 'invalid_challenge');
+    const loggedIn = await post('/auth/verify', proof);
+    assert.equal(loggedIn.statusCode, 200);
+    const cookie = loggedIn.headers['set-cookie'] as string;
+    for (const flag of [/; Secure/, /; HttpOnly/, /; SameSite=Lax/, /; Path=\//, /Max-Age=604800/]) assert.match(cookie, flag);
+    assert.doesNotMatch(cookie, /; Domain=/i);
+    assert.equal((await app.inject({ url: '/me', headers: { cookie } })).statusCode, 200);
+    const link = (await post('/wallets/link/challenge', { ecosystem: 'evm', address: evmB.address, authorizer: { ecosystem: 'evm', address: evmA.address } }, cookie)).json();
+    assert.ok(link.message.includes(`Origin: ${origin}\n`));
+    assert.ok(link.authorizer.message.includes(`Origin: ${origin}\n`));
+    const foreignLogout = await app.inject({ method: 'POST', url: '/logout', headers: { cookie, origin: 'https://unrelated.vercel.app' } });
+    assert.equal(foreignLogout.statusCode, 403);
+    assert.equal((await app.inject({ url: '/me', headers: { cookie } })).statusCode, 200);
+    const loggedOut = await post('/logout', {}, cookie);
+    assert.equal(loggedOut.statusCode, 200);
+    assert.match(loggedOut.headers['set-cookie'] as string, /; Secure/);
+    assert.doesNotMatch(loggedOut.headers['set-cookie'] as string, /; Domain=/i);
+    assert.equal((await app.inject({ url: '/me', headers: { cookie } })).statusCode, 401);
+  }
 });
 
 test('Solana login and invalid Ed25519 signature', async (t) => {

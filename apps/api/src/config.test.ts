@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readServerConfig, readDatabaseUrl } from './config.js';
+import { readServerConfig, readDatabaseUrl, readFrontendOrigin } from './config.js';
 
 const DATABASE_URL = 'postgresql://vehicle:example@localhost:5432/vehicle_test';
 
@@ -21,8 +21,32 @@ test('platform PORT takes precedence while API_PORT and API_HOST remain configur
 
 test('Vercel environments use PostgreSQL and never fall back to SQLite', () => {
   for (const VERCEL_ENV of ['development', 'preview', 'production']) {
-    assert.equal(readServerConfig({ DATABASE_URL, VERCEL: '1', VERCEL_ENV }).databaseUrl, DATABASE_URL);
+    assert.equal(readServerConfig({ DATABASE_URL, VERCEL: '1', VERCEL_ENV, VERCEL_URL: 'vehicle-preview-123.vercel.app', FRONTEND_ORIGIN: 'https://marketplace.example' }).databaseUrl, DATABASE_URL);
     assert.throws(() => readServerConfig({ VERCEL: '1', VERCEL_ENV, DATABASE_PATH: '/tmp/auth.sqlite' }), /DATABASE_URL is required/);
+  }
+});
+
+test('Preview trusts exactly its generated deployment origin, ignoring Production and branch origins', () => {
+  const env = { VERCEL: '1', VERCEL_ENV: 'preview', VERCEL_URL: 'vehicle-preview-123.vercel.app', VERCEL_BRANCH_URL: 'vehicle-git-feature.vercel.app', VERCEL_PROJECT_PRODUCTION_URL: 'marketplace.example', FRONTEND_ORIGIN: 'https://marketplace.example' };
+  assert.equal(readFrontendOrigin(env), 'https://vehicle-preview-123.vercel.app');
+  for (const VERCEL_URL of [undefined, '', '*.vercel.app', 'https://vehicle-preview-123.vercel.app', 'vehicle-preview-123.vercel.app/path', 'vehicle-preview-123.vercel.app:443', 'attacker.example', 'vehicle-preview-123.vercel.app?query=1']) {
+    assert.throws(() => readFrontendOrigin({ ...env, VERCEL_URL }), /valid platform VERCEL_URL/);
+  }
+});
+
+test('Production requires one explicit HTTPS canonical origin and never falls back to deployment metadata', () => {
+  const env = { VERCEL: '1', VERCEL_ENV: 'production', VERCEL_URL: 'vehicle-production-123.vercel.app', VERCEL_PROJECT_PRODUCTION_URL: 'marketplace.example' };
+  assert.throws(() => readFrontendOrigin(env), /canonical FRONTEND_ORIGIN/);
+  assert.equal(readFrontendOrigin({ ...env, FRONTEND_ORIGIN: 'https://marketplace.example' }), 'https://marketplace.example');
+  assert.throws(() => readFrontendOrigin({ ...env, FRONTEND_ORIGIN: 'http://marketplace.example' }), /hosted origins require HTTPS/);
+  assert.throws(() => readFrontendOrigin({ ...env, VERCEL_ENV: undefined }), /recognized VERCEL_ENV/);
+});
+
+test('local origins remain exact and malformed or wildcard origin settings fail closed', () => {
+  assert.equal(readFrontendOrigin({}), 'http://localhost:5173');
+  assert.equal(readFrontendOrigin({ VERCEL: '1', VERCEL_ENV: 'development', FRONTEND_ORIGIN: 'http://localhost:3000' }), 'http://localhost:3000');
+  for (const FRONTEND_ORIGIN of ['', 'null', '*', 'https://*.vercel.app', 'https://marketplace.example/', 'https://marketplace.example/path', 'https://marketplace.example?query=1', 'https://marketplace.example#hash', 'https://user:credential@marketplace.example', 'https://a.example,https://b.example']) {
+    assert.throws(() => readFrontendOrigin({ FRONTEND_ORIGIN }), (error: unknown) => error instanceof Error && error.message === 'Frontend origin must be one exact origin; hosted origins require HTTPS.');
   }
 });
 

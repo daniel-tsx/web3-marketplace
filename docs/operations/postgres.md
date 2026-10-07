@@ -166,8 +166,10 @@ tests, never in the API runtime. No existing local snapshot was imported here.
 
 Use an isolated Neon branch/database and credentials for Preview, separate from
 Production. Configure server-only `DATABASE_URL` per Vercel environment, apply
-schema explicitly to each target, and configure that deployment's exact
-`FRONTEND_ORIGIN`. Keep the direct administrative URL in operator/CI secrets;
+schema explicitly to each target. Production requires its canonical
+`FRONTEND_ORIGIN`; Preview derives its exact origin from platform metadata as
+defined in [the deployment guide](vercel.md#api-origin-and-cookies).
+Keep the direct administrative URL in operator/CI secrets;
 it does not need to be entered in the Vercel runtime dashboard. Builds need no
 database access. A fresh target requires schema even when no data is imported.
 
@@ -242,7 +244,7 @@ configuration or deployment was performed in this verification run. Hosted
 verification must still cover Vercel builds/routing/assets, HTTPS browser cookies,
 Fluid Compute pool suspension, Neon suspend/resume and suitable connection capacity.
 Before a Vercel smoke deployment, configure the intended isolated deployment database
-and server-only runtime URL, its schema and the exact browser origin; resolve the
-recorded Services integration failure. Preview's multi-origin strategy remains
-separate. A functional marketplace additionally needs the public blockchain
+and server-only runtime URL, its schema and the browser-origin policy. The
+subsequent [hosted smoke preparation](vercel.md#hosted-smoke-preparation-on-2026-10-07)
+records the Services fix and exact Preview metadata strategy. A functional marketplace additionally needs the public blockchain
 deployments/configuration listed in [the deployment guide](vercel.md#dashboard-inputs-and-functional-deployment-blockers).
