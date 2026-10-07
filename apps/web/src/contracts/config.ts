@@ -16,7 +16,7 @@ export const localChain = defineChain({
 
 const connectors = connectorsForWallets(
   [{ groupName: 'Browser wallet', wallets: [injectedWallet] }],
-  { appName: 'Vehicle Marketplace Study', projectId: 'local-injected-only' },
+  { appName: 'Multi-Chain Vehicle Marketplace', projectId: 'local-injected-only' },
 );
 
 export const wagmiConfig = createConfig({

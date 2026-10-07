@@ -4,8 +4,9 @@ dist/
 packages/contracts/out/
 packages/contracts/cache/
 packages/contracts/broadcast/
-apps/web/.env.local
 .env
+.env.*
+!.env.example
 .tools/
 apps/api/.local/
 packages/solana/.local/

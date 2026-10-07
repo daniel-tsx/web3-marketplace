@@ -1,5 +1,5 @@
 {
-  "name": "vehicle-marketplace-study",
+  "name": "multichain-vehicle-marketplace",
   "private": true,
   "packageManager": "pnpm@10.26.0",
   "pnpm": { "overrides": { "zod": "4.5.0" } },

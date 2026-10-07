@@ -1,7 +1,8 @@
 # Agent start here
 
-Status: **current**. Repository context inspected on 2026-10-06 at H1 commit
-`7819786`. This is the task router; [AGENTS.md](../AGENTS.md) owns behavior,
+Status: **current**. This router covers the implemented H1–H3 boundaries;
+verify task-specific facts against source and current verification evidence.
+[AGENTS.md](../AGENTS.md) owns behavior,
 [docs/README](README.md) owns document routing/lifecycle, and code owns implementation truth.
 
 ## Required read order
@@ -75,9 +76,9 @@ Anchor, Solana CLI/validator, Rust/Cargo, and Sui are absent from PATH; `wsl --l
   TypeScript builder tests. Availability does not mean they were rerun in this task.
 - **Environment unavailable:** Anchor build/validator runtime and Sui Move
   build/scenario runtime. Offline tests cannot validate either runtime.
-- **Evidence:** [H1 verification](audit-fix-01-purchase-intent.md#verification)
-  records earlier EVM/TypeScript passes and unavailable chain tools. This workflow
-  change validates documentation/tooling only, with no new runtime or wallet-flow claims.
+- **Evidence:** [Verification records](operations/verification.md#repository-polish-verification)
+  distinguish the latest repository-polish checks from historical H1/H2 results.
+  No offline or compiler check establishes a deployed browser-wallet flow.
 
 ## Source-of-truth map
 

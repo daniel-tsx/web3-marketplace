@@ -54,7 +54,8 @@ matching BCS parsing. Static client agreement still needs the relevant runtime e
 
 The catalog is three known EVM token IDs, one configured Solana vehicle mint and
 one configured Sui Vehicle. Sui follows the shared Market's single active-listing
-slot. These are study discovery shortcuts, not a general indexer. The API does not
+slot. Discovery is intentionally limited to these configured assets; there is no
+general indexer. The API does not
 mirror any listings, balances or settlement outcomes.
 
 EVM/Solana fixtures target local chains; the Sui frontend defaults to testnet and

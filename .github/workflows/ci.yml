@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node and EVM verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout including forge-std
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install repository-pinned pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.3
+
+      - name: Build Solidity and export frontend ABIs
+        run: pnpm contracts:build
+
+      - name: Check generated ABI consistency
+        run: git diff --exit-code -- apps/web/src/contracts/abis.ts
+
+      - name: Test Solidity marketplace
+        run: pnpm contracts:test
+
+      - name: Test API identity and wallet linking
+        run: pnpm api:test
+
+      - name: Test frontend execution and reconciliation
+        run: pnpm execution:test
+
+      - name: Test Solana offline client
+        run: pnpm --dir packages/solana test
+
+      - name: Test Sui TypeScript client
+        run: pnpm sui:test
+
+      - name: Typecheck workspace
+        run: pnpm typecheck
+
+      - name: Lint frontend
+        run: pnpm lint
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Build API
+        run: pnpm --dir apps/api build

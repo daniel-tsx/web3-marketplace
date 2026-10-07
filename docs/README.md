@@ -19,7 +19,10 @@ truth and source paths; follow [AGENTS.md](../AGENTS.md) for behavioral policy.
 | H2 credential-change invariant | [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence); [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the implementation. |
 | H3 execution/reconciliation invariant | [Trust boundaries](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success) |
 
-The root [README](../README.md) remains the human quick start. The run guides below
+The root [README](../README.md) is the human engineering overview and quick start.
+The [CI workflow](../.github/workflows/ci.yml) and location-specific
+[web](../apps/web/.env.example)/[API](../apps/api/.env.example) examples are described
+by the verification/setup owner. The run guides below
 own detailed explanations within their run/chain scope; current cross-cutting docs
 link to them rather than duplicating transaction walkthroughs.
 
