@@ -6,7 +6,7 @@ import { buildBuyVehicleTransaction, buildCancelListingTransaction, buildListVeh
 import { executionPrompt, type ExecutionContext } from '../execution/resolveExecution';
 import { suiCoinType, suiMarketId, suiPackageId, suiVehicleId } from '../web3/sui/config';
 import { useSuiVehicleState } from '../web3/sui/useSuiVehicleState';
-import { affectedSuiKeys } from '../web3/sui/queryKeys';
+import { reconcileSuiVehicleState } from '../web3/sui/reconcileVehicleState';
 import { useSuiTransaction } from '../web3/sui/useSuiTransaction';
 
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
@@ -25,8 +25,7 @@ export function SuiVehicleCard({ context }: { context: ExecutionContext }) {
   const readError = [state.market, state.listing, state.vehicle, state.buyerBalance, state.sellerBalance, state.feeBalance].find((query) => query.isError)?.error;
 
   async function refresh(action: 'list' | 'cancel' | 'buy', seller?: string, feeRecipient?: string) {
-    const keys = affectedSuiKeys({ action, network: state.network, marketId: suiMarketId!, vehicleId: suiVehicleId!, listingId: listing?.id, coinType: suiCoinType ?? undefined, buyer: owner, seller, feeRecipient });
-    await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey, exact: true })));
+    await reconcileSuiVehicleState(queryClient, state.queries, { action, network: state.network, marketId: suiMarketId!, vehicleId: suiVehicleId!, listingId: listing?.id, coinType: suiCoinType ?? undefined, buyer: owner, seller, feeRecipient });
   }
 
   function list() {
@@ -72,9 +71,9 @@ export function SuiVehicleCard({ context }: { context: ExecutionContext }) {
       <strong>Sui: {tx.phase.stage}</strong>
       {'digest' in tx.phase && tx.phase.digest && <p>Digest: <code>{tx.phase.digest}</code></p>}
       {tx.phase.stage === 'wallet' && <p>Approve in your Sui wallet.</p>}
-      {tx.phase.stage === 'confirming' && <p>Waiting for transaction reads before refreshing objects.</p>}
-      {tx.phase.stage === 'executed' && <p className="error">Transaction executed, but reads are not yet verified: {tx.phase.refreshError}</p>}
-      {tx.phase.stage === 'confirmed' && <><p>{tx.phase.refreshError ? `Transaction succeeded; query refresh failed: ${tx.phase.refreshError}` : 'Affected Sui reads refreshed.'}</p><details><summary>Effects, events, and balance changes</summary><pre>{tx.phase.details}</pre></details></>}
+      {tx.phase.stage === 'reconciling' && <p>Transaction succeeded. Waiting for transaction reads and refreshing affected objects…</p>}
+      {tx.phase.stage === 'reconciliation-failed' && <><p className="error">Transaction succeeded; state refresh failed: {tx.phase.refreshError.message}. Retry refresh safely; do not resubmit the transaction.</p><button onClick={() => void tx.retryReconciliation()}>Retry state refresh</button></>}
+      {tx.phase.stage === 'confirmed' && <><p>Confirmed. Affected Sui reads refreshed.</p><details><summary>Effects, events, and balance changes</summary><pre>{tx.phase.details}</pre></details></>}
       {(tx.phase.stage === 'failed' || tx.phase.stage === 'rejected') && <p className="error">{tx.phase.message}</p>}
     </div>}
   </article>;

@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react';
 import { usePublicClient } from 'wagmi';
 import type { Hash, TransactionReceipt } from 'viem';
 import { explainWeb3Error, type Web3ActionError } from './errors';
+import type { ReconciliationPhase } from './reconciliation';
+import { useReadReconciliation } from './useReadReconciliation';
 
 export type TransactionPhase =
   | { stage: 'idle' }
   | { stage: 'wallet' }
   | { stage: 'submitted' | 'pending'; hash: Hash }
-  | { stage: 'confirmed'; hash: Hash; detail?: string; refreshError?: Web3ActionError }
+  | ({ hash: Hash; detail?: string } & ReconciliationPhase)
   | { stage: 'rejected' | 'failed'; error: Web3ActionError; hash?: Hash };
 
 export function useTransactionFlow() {
   const publicClient = usePublicClient();
   const [phase, setPhase] = useState<TransactionPhase>({ stage: 'idle' });
+  const reconciliation = useReadReconciliation<{ hash: Hash; detail?: string }>(setPhase);
 
   useEffect(() => {
     if (phase.stage !== 'submitted') return;
@@ -26,6 +29,8 @@ export function useTransactionFlow() {
     inspectReceipt?: (receipt: TransactionReceipt) => string | undefined,
     diagnoseRevert?: (blockNumber: bigint) => Promise<unknown>,
   ) {
+    if (busy) return;
+    reconciliation.reset();
     if (!publicClient) {
       setPhase({ stage: 'failed', error: { kind: 'wrong-chain', message: 'Switch to the local Anvil chain.', cause: null } });
       return;
@@ -44,13 +49,7 @@ export function useTransactionFlow() {
       let detail: string | undefined;
       try { detail = inspectReceipt?.(receipt); }
       catch (cause) { console.error('Receipt event decoding failed', cause); }
-      try {
-        await refreshAffectedQueries();
-        setPhase({ stage: 'confirmed', hash, detail });
-      } catch (cause) {
-        console.error('Transaction confirmed but query refresh failed', cause);
-        setPhase({ stage: 'confirmed', hash, detail, refreshError: explainWeb3Error(cause) });
-      }
+      await reconciliation.start({ hash, detail }, async () => { await refreshAffectedQueries(); });
     } catch (cause) {
       const error = explainWeb3Error(cause);
       console.error('Web3 transaction failed', cause);
@@ -58,6 +57,6 @@ export function useTransactionFlow() {
     }
   }
 
-  const busy = phase.stage === 'wallet' || phase.stage === 'submitted' || phase.stage === 'pending';
-  return { phase, busy, run };
+  const busy = phase.stage === 'wallet' || phase.stage === 'submitted' || phase.stage === 'pending' || phase.stage === 'reconciling' || phase.stage === 'reconciliation-failed';
+  return { phase, busy, run, retryReconciliation: reconciliation.retry };
 }

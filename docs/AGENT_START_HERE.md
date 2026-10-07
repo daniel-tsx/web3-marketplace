@@ -47,7 +47,9 @@ format, see [AI_WORKFLOW](AI_WORKFLOW.md).
   owns the detailed fix and breaking local deployment compatibility.
 - **H2:** [Trust boundaries](architecture/trust-boundaries.md) owns sensitive wallet-link authorization;
   [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the session-bound two-proof protocol.
-  H3 is unchanged.
+- **H3:** [Transaction result boundaries](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success)
+  owns the read-only reconciliation state. Successful execution is retained when
+  targeted rereads fail; retry refresh never signs/resubmits or replaces H1 terms.
 
 ## Stack truth
 
@@ -93,7 +95,7 @@ run guides are deeper, scoped references rather than competing current summaries
 | API persistence | [Database](../apps/api/src/db.ts), [startup](../apps/api/src/index.ts), [init](../apps/api/src/init-db.ts), [tests](../apps/api/src/server.test.ts) | [Trust boundaries](architecture/trust-boundaries.md); [Run 3 migration](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | SQLite owns identity only; no listings, balances, custody, or settlement. |
 | Environment/configuration | [EVM config](../apps/web/src/contracts/config.ts), [addresses](../apps/web/src/contracts/addresses.ts), [Sui config](../apps/web/src/web3/sui/config.ts), [bootstrap](../apps/web/src/bootstrap.tsx), [API startup](../apps/api/src/index.ts), [address sync](../scripts/sync-addresses.mjs), [Solana seed](../packages/solana/scripts/seed.ts), [Anchor config](../packages/solana/Anchor.toml) | [Verification/setup notes](operations/verification.md#local-setup-boundaries); root README and run setup sections | Public browser config only; EVM/Solana scripts target local chains; Sui needs an explicit deployment. |
 | Verification/tests | [Root scripts](../package.json), workspace manifests above, [contracts](../packages/contracts/test/), [API](../apps/api/src/server.test.ts), [frontend](../apps/web/package.json), [Solana](../packages/solana/tests/), [Sui](../packages/sui/tests/), [Move](../packages/sui/move/tests/) | [Verification](operations/verification.md) | Distinguish offline, compiler, runtime, and actual wallet evidence. |
-| Audit fixes | Chain sources/clients above, [purchase errors/tests](../apps/web/src/web3/purchaseIntent.test.ts), [wallet-link tests](../apps/api/src/wallet-link.test.ts) | [H1 audit fix](audit-fix-01-purchase-intent.md), [H2 implementation](audit-fix-02-wallet-link-reauthentication.md) | Preserve purchase intent and sensitive credential-change authorization. H3 is unchanged. |
+| Audit fixes | Chain sources/clients above, [purchase errors/tests](../apps/web/src/web3/purchaseIntent.test.ts), [wallet-link tests](../apps/api/src/wallet-link.test.ts), [reconciliation tests](../apps/web/src/web3/reconciliation.test.ts) | [H1 audit fix](audit-fix-01-purchase-intent.md), [H2 implementation](audit-fix-02-wallet-link-reauthentication.md), [H3 result boundary](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success) | Preserve purchase intent, credential-change authorization and execution success separately from read reconciliation. |
 
 ## Known documentation drift
 
@@ -108,9 +110,9 @@ Use this map and H1 when interpreting them:
   tree omits Sui, its TypeScript scope omits the Sui package, and it describes
   `execution:test` as resolver-only. Its localnet-only scope does not cover Run 3's
   default Sui testnet integration. Run 3 and current scripts extend these sections.
-- [Run 3](run-03-sui-multichain.md) omits the `executed` phase that
-  `useSuiTransaction.ts` uses when wallet execution succeeds but subsequent
-  transaction reads fail. See [the result boundary](architecture/trust-boundaries.md#transaction-results-and-partial-failures).
+- Run 1/2/3's transaction descriptions predate H3's explicit `reconciling` and
+  `reconciliation-failed` stages and safe read-only retry. Use [the current result boundary](architecture/trust-boundaries.md#transaction-results-and-partial-failures),
+  rather than interpreting resolved cache invalidation as successful reconciliation.
 - Run 2/3's original wallet-link traces predate H2. Use [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence)
   and [the H2 protocol](audit-fix-02-wallet-link-reauthentication.md) for the required trusted-wallet and target-wallet proofs.
 - The [Solana seed](../packages/solana/scripts/seed.ts) writes

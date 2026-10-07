@@ -37,7 +37,7 @@ means the check's tools are present here, not that the check has just passed.
 | Solidity compile + ABI export | `pnpm contracts:build` | Foundry/solc, OpenZeppelin and initialized forge-std submodule; regenerates [abis.ts](../../apps/web/src/contracts/abis.ts). | Available using local Foundry/PATH setup below. |
 | EVM tests | `pnpm contracts:test` | [Foundry suite](../../packages/contracts/test/VehicleMarketplace.t.sol), including H1; no Anvil or wallet needed. | Available using local Foundry/PATH setup. |
 | API tests | `pnpm api:test` | [Server tests](../../apps/api/src/server.test.ts), in-memory/temporary SQLite and cryptographic proofs/migration; no HTTP server or chain runtime needed. | Available. |
-| Frontend execution tests | `pnpm execution:test` | Resolver, Sui result/query-key helpers, purchase-error tests listed in [web scripts](../../apps/web/package.json); no browser/wallet needed. | Available; does not test rendered UI or real transactions. |
+| Frontend execution tests | `pnpm execution:test` | Resolver, Sui result/query/read helpers, purchase-error and [H3 reconciliation tests](../../apps/web/src/web3/reconciliation.test.ts) listed in [web scripts](../../apps/web/package.json); no browser/wallet needed. | Available; uses real query clients, controlled reads and a server-rendered EVM status. Does not test browser interaction or real wallet/RPC execution. |
 | TypeScript | `pnpm typecheck` | Recursive API/web/Solana/Sui typechecks; contracts package has no typecheck script. | Available; does not compile Rust or Move. |
 | Lint | `pnpm lint` | ESLint on `apps/web/src` only. | Available; not repository-wide lint. |
 | Frontend build | `pnpm build` | Web TypeScript then Vite production bundle. | Available; no API or chain deployment. |

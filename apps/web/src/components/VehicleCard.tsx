@@ -7,6 +7,7 @@ import { addresses } from '../contracts/addresses';
 import { localChain } from '../contracts/config';
 import { useTransactionFlow } from '../web3/useTransactionFlow';
 import { useVehicleState } from '../web3/useVehicleState';
+import { refetchAffectedQueries } from '../web3/reconciliation';
 import { TransactionStatus } from './TransactionStatus';
 
 const sameAddress = (a?: Address, b?: Address) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
@@ -31,7 +32,7 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
     .find((query) => query.isError)?.error;
 
   async function refresh(...keys: readonly (readonly unknown[])[]) {
-    await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey, exact: true })));
+    await refetchAffectedQueries(queryClient, keys);
   }
 
   function approveNft() {
@@ -86,7 +87,10 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
     void tx.run(
       () => writeContractAsync({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args, account, chainId: localChain.id }),
       // Only these reads can change for the currently displayed account/card.
-      () => refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey, data.balance.queryKey, data.allowance.queryKey),
+      async () => {
+        await refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey, data.balance.queryKey, data.allowance.queryKey);
+        await data.refreshOperatorApproval();
+      },
       describePurchase,
       // A mined revert has no error data in its receipt. Replay the same intent for diagnostics only.
       (blockNumber) => publicClient!.simulateContract({ address: addresses.marketplace, abi: VehicleMarketplaceAbi, functionName: 'buyVehicle', args, account, blockNumber }),
@@ -121,7 +125,7 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
     {canShowBuyerActions && (data.balance.data ?? 0n) >= (price ?? 0n) && (data.allowance.data ?? 0n) < (price ?? 0n) && <button disabled={tx.busy} onClick={approveUsdc}>Approve {money(price)} spending</button>}
     {canShowBuyerActions && (data.balance.data ?? 0n) >= (price ?? 0n) && (data.allowance.data ?? 0n) >= (price ?? 0n) && <button disabled={tx.busy} onClick={buyVehicle}>Buy vehicle</button>}
     {active && !staleOwner && !data.approved && !ownListing && <p>Seller must restore NFT approval before purchase.</p>}
-    <TransactionStatus phase={tx.phase} />
-    {tx.phase.stage === 'failed' && tx.phase.error.kind === 'stale-listing' && <button onClick={() => void refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey)}>Refresh listing and review terms</button>}
+    <TransactionStatus phase={tx.phase} retryReconciliation={tx.retryReconciliation} />
+    {tx.phase.stage === 'failed' && tx.phase.error.kind === 'stale-listing' && <button onClick={() => void refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey).catch(console.error)}>Refresh listing and review terms</button>}
   </article>;
 }

@@ -62,11 +62,60 @@ targets the reviewed object. Cached rereads cannot close an execution-time race.
 
 ## Transaction results and partial failures
 
-| Chain | Existing result behavior |
+| Chain | Execution proof and reconciliation reads |
 | --- | --- |
-| [EVM hook](../../apps/web/src/web3/useTransactionFlow.ts) | Hash is submission; receipt must have success status. Receipt event parsing is diagnostic. Refresh failure preserves confirmed execution with a separate `refreshError`. H1 revert simulation is read-only diagnosis using the same arguments, not a retry. |
-| [Solana hook](../../apps/web/src/web3/solana/useSolanaTransaction.ts) | Signature is submission; `confirmTransaction` uses `confirmed` commitment and checks its error, then inspects available transaction metadata/logs. Missing metadata is not a claim of decoded logs. Refresh failure is reported separately. This is not a promise of finalized commitment. |
-| [Sui hook](../../apps/web/src/web3/sui/useSuiTransaction.ts) | `successfulDigest` rejects `FailedTransaction`; successful wallet execution is followed by wait/transaction reads. Read/inspection failure yields `executed` with a read error; verified reads then refresh affected queries and yield `confirmed`, retaining any refresh error. |
+| [EVM hook](../../apps/web/src/web3/useTransactionFlow.ts) | Hash is submission; receipt must have success status before reconciliation. Receipt event parsing is diagnostic. Reconciliation reads affected Wagmi contract queries, including the new owner's operator-approval key after a purchase. H1 revert simulation still uses the same arguments for read-only diagnosis. |
+| [Solana hook](../../apps/web/src/web3/solana/useSolanaTransaction.ts) | Signature is submission; `confirmTransaction` at `confirmed` commitment must return no execution error. Subsequent metadata/log reads and affected PDA/escrow/ATA reads belong to reconciliation. A metadata RPC failure cannot overwrite successful confirmation. Missing metadata is not a claim of decoded logs; `confirmed` commitment is not finalized commitment. |
+| [Sui hook](../../apps/web/src/web3/sui/useSuiTransaction.ts) | `successfulDigest` requires successful wallet execution and rejects `FailedTransaction`. Reconciliation repeats only wait/transaction reads and affected object/balance reads. It rereads Market first, then the current Listing or unwrapped Vehicle; an obsolete inactive Listing is invalidated without being parsed as the active resource. |
+
+### H3: execution success is separate from reconciliation success
+
+Previously each card awaited `invalidateQueries()`, whose default refetch handling
+can suppress query errors. A failed RPC reread could therefore resolve refresh and
+mark the UI fully confirmed while displaying stale data. Execution failure and
+post-execution reads are different failure domains.
+
+The three native flows now enter the shared [read-only reconciliation state](../../apps/web/src/web3/reconciliation.ts)
+only after their execution-success checks:
+
+- `reconciling`: execution succeeded; affected reads are pending.
+- `confirmed`: execution succeeded and all required reconciliation reads completed.
+- `reconciliation-failed`: execution succeeded, but a read failed. The native
+  hash/signature/digest and original error (`refreshError.cause`) remain available.
+
+Wallet rejection or unsuccessful/unverified execution remains in the native
+failure path and does not start reconciliation. No universal transaction executor
+is introduced: each chain still owns signing, submission, confirmation, diagnostics
+and its affected read set.
+
+Targeted reads invalidate without automatic refetch, cancel any in-flight
+pre-transaction response, then await an explicit `fetchQuery` with `staleTime: 0`
+and no automatic retry for that attempt. The promise rejects on RPC/parser errors.
+Disabled reads are explicitly fetched when needed; an offline paused read remains
+pending rather than becoming a successful no-op. Duplicate keys share one reread.
+Only optional recipient balances without cache entries are left invalidated;
+required displayed reads cannot silently disappear from the reconciliation set.
+
+The UI says **transaction succeeded; state refresh failed**, retains the native
+identifier, and offers **Retry state refresh**. The saved retry job contains only
+read callbacks. It cannot request a signature, resend a transaction, rebuild a
+purchase or substitute new H1 terms. Repeated clicks share the pending read job.
+Marketplace write buttons remain disabled until reconciliation succeeds. A new
+transaction discards the old retry job, and older read completions cannot replace
+its transaction result.
+
+Reconciliation is a fresh RPC read at the existing chain commitment/read boundary,
+not an atomic cross-query snapshot, stronger finality, or protection against a later
+actor changing state. Partial refreshes may update some cached fields while others
+fail; the transaction remains explicitly unreconciled until the targeted read batch
+succeeds. H1 and H2 enforcement remain unchanged.
+
+Regression coverage uses real TanStack Query clients/observers and controlled
+read functions: suppressed invalidation errors, success/failure/read-only recovery
+for native identifiers, partial failures, concurrent retries, disabled/paused
+reads, pre-transaction responses and Sui resource transitions. The EVM status copy
+is server-rendered in a test. These tests do not exercise real wallet/RPC execution;
+see [verification](../operations/verification.md) for runtime prerequisites.
 
 Do not collapse execution failure, uncertain/read-unavailable results and failed
 cache refresh into one claim. A submitted identifier does not justify reporting

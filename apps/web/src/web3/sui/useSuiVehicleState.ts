@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCurrentClient, useCurrentNetwork } from '@mysten/dapp-kit-react';
-import { parseListing, parseMarket, parseVehicle } from '@vehicle/sui';
 import { suiCoinType, suiMarketId, suiVehicleId } from './config';
 import { suiKey } from './queryKeys';
+import { suiVehicleQueries } from './reconcileVehicleState';
 
 function useSuiBalance(network: string, owner?: string) {
   const client = useCurrentClient();
@@ -19,36 +19,22 @@ function useSuiBalance(network: string, owner?: string) {
 export function useSuiVehicleState(connected?: string) {
   const client = useCurrentClient();
   const network = useCurrentNetwork();
+  const queries = suiVehicleQueries(client, network, suiMarketId ?? 'unconfigured', suiVehicleId ?? 'unconfigured');
   const market = useQuery({
-    queryKey: suiKey.market(network, suiMarketId ?? 'unconfigured'),
+    ...queries.market,
     enabled: Boolean(suiMarketId),
-    queryFn: async () => {
-      const { object } = await client.getObject({ objectId: suiMarketId!, include: { content: true } });
-      return parseMarket(object.content);
-    },
   });
   const listingId = market.data?.listingId;
   const listing = useQuery({
-    queryKey: suiKey.listing(network, listingId ?? 'inactive'),
+    ...queries.listing(listingId ?? 'inactive'),
     enabled: Boolean(listingId),
-    queryFn: async () => {
-      const { object } = await client.getObject({ objectId: listingId!, include: { content: true } });
-      const parsed = parseListing(object.content);
-      if (!parsed.vehicleId) throw new Error('Market points to an inactive Sui listing.');
-      if (parsed.vehicleId !== suiVehicleId) throw new Error('Market listing contains a different Vehicle object than this catalog entry.');
-      return parsed;
-    },
   });
   const vehicle = useQuery({
-    queryKey: suiKey.vehicle(network, suiVehicleId ?? 'unconfigured'),
+    ...queries.vehicle,
     enabled: Boolean(suiVehicleId && market.isSuccess && !listingId),
-    queryFn: async () => {
-      const { object } = await client.getObject({ objectId: suiVehicleId!, include: { content: true } });
-      return { ...parseVehicle(object.content), owner: object.owner.$kind === 'AddressOwner' ? object.owner.AddressOwner : null };
-    },
   });
   const buyerBalance = useSuiBalance(network, connected);
   const sellerBalance = useSuiBalance(network, listing.data?.seller);
   const feeBalance = useSuiBalance(network, market.data?.feeRecipient);
-  return { market, listing, vehicle, buyerBalance, sellerBalance, feeBalance, network };
+  return { market, listing, vehicle, buyerBalance, sellerBalance, feeBalance, network, queries };
 }

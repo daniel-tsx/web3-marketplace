@@ -17,6 +17,7 @@ truth and source paths; follow [AGENTS.md](../AGENTS.md) for behavioral policy.
 | Verification commands, prerequisites and host limitations | [Verification](operations/verification.md) |
 | H1 intent invariant and deployment compatibility | [Audit fix 01](audit-fix-01-purchase-intent.md) |
 | H2 credential-change invariant | [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence); [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the implementation. |
+| H3 execution/reconciliation invariant | [Trust boundaries](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success) |
 
 The root [README](../README.md) remains the human quick start. The run guides below
 own detailed explanations within their run/chain scope; current cross-cutting docs

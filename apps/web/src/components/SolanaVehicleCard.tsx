@@ -7,6 +7,7 @@ import { buyVehicleInstruction, cancelListingInstruction, FEE_RECIPIENT, listVeh
 import { executionPrompt, type ExecutionContext } from '../execution/resolveExecution';
 import { solanaKey, useSolanaVehicleState } from '../web3/solana/useSolanaVehicleState';
 import { useSolanaTransaction } from '../web3/solana/useSolanaTransaction';
+import { refetchAffectedQueries } from '../web3/reconciliation';
 
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
 
@@ -23,37 +24,41 @@ export function SolanaVehicleCard({ vehicleMint, paymentMint, context }: { vehic
   const ready = context.status === 'ready' && state.paymentMintMatches;
   const readError = [state.listing, state.escrow, state.vehicleBalance, state.paymentBalance, state.config].find((query) => query.isError)?.error;
 
-  async function refresh(...keys: readonly (readonly unknown[])[]) {
-    await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey, exact: true })));
+  async function refresh(keys: readonly (readonly unknown[])[], recipientKeys: readonly (readonly unknown[])[] = []) {
+    // Recipient balances may have no observer/cache entry in this card. Keep
+    // those invalidated; every displayed account must actually finish its reread.
+    await Promise.all(recipientKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'none' })));
+    await refetchAffectedQueries(queryClient, [...keys, ...recipientKeys.filter((queryKey) => queryClient.getQueryCache().find({ queryKey, exact: true }))]);
   }
 
   function list() {
     if (!ready || !wallet.publicKey || listing || state.vehicleBalance.data !== 1n) return;
     let price: bigint;
     try { price = parseUnits(priceInput, 6); if (price <= 0n || price > (1n << 64n) - 1n) return; } catch { return; }
-    void tx.run(listVehicleInstruction(wallet.publicKey, vehicleMint, paymentMint, price), () => refresh(
+    void tx.run(listVehicleInstruction(wallet.publicKey, vehicleMint, paymentMint, price), () => refresh([
       solanaKey.listing(mint), solanaKey.escrow(mint), solanaKey.token(mint, owner!),
-    ));
+    ]));
   }
 
   function cancel() {
     if (!ready || !wallet.publicKey || !isSeller) return;
-    void tx.run(cancelListingInstruction(wallet.publicKey, vehicleMint), () => refresh(
+    void tx.run(cancelListingInstruction(wallet.publicKey, vehicleMint), () => refresh([
       solanaKey.listing(mint), solanaKey.escrow(mint), solanaKey.token(mint, owner!),
-    ));
+    ]));
   }
 
   function buy() {
     if (!ready || !wallet.publicKey || !listing || isSeller || (state.paymentBalance.data ?? 0n) < listing.price) return;
     // Bind the instruction to this rendered listing, without substituting a fresh read.
     const intent = { expectedVersion: listing.version, maxPrice: listing.price };
-    void tx.run(buyVehicleInstruction(wallet.publicKey, listing, intent), () => refresh(
+    void tx.run(buyVehicleInstruction(wallet.publicKey, listing, intent), () => refresh([
       solanaKey.listing(mint), solanaKey.escrow(mint),
       solanaKey.token(mint, owner!),
       solanaKey.token(paymentMint.toBase58(), owner!),
+    ], [
       solanaKey.token(paymentMint.toBase58(), listing.seller.toBase58()),
       solanaKey.token(paymentMint.toBase58(), FEE_RECIPIENT.toBase58()),
-    ));
+    ]));
   }
 
   return <article className="vehicle-card">
@@ -85,9 +90,11 @@ export function SolanaVehicleCard({ vehicleMint, paymentMint, context }: { vehic
       {'signature' in tx.phase && <p>Signature: <code>{tx.phase.signature}</code></p>}
       {tx.phase.stage === 'wallet' && <p>Approve in your wallet.</p>}
       {tx.phase.stage === 'pending' && <p>Signature returned; waiting for confirmation.</p>}
-      {tx.phase.stage === 'confirmed' && <p>Confirmed. {tx.phase.refreshError ? `Account refresh failed: ${tx.phase.refreshError}` : 'Affected account reads refreshed.'}</p>}
+      {tx.phase.stage === 'reconciling' && <p>Transaction succeeded. Refreshing affected account reads…</p>}
+      {tx.phase.stage === 'confirmed' && <p>Confirmed. Affected account reads refreshed.</p>}
+      {tx.phase.stage === 'reconciliation-failed' && <><p className="error">Transaction succeeded; state refresh failed: {tx.phase.refreshError.message}. Retry refresh safely; do not resubmit the transaction.</p><button onClick={() => void tx.retryReconciliation()}>Retry state refresh</button></>}
       {(tx.phase.stage === 'failed' || tx.phase.stage === 'rejected') && <p className="error">{tx.phase.message}</p>}
-      {tx.phase.stage === 'failed' && <button onClick={() => void refresh(solanaKey.listing(mint), solanaKey.escrow(mint), solanaKey.token(paymentMint.toBase58(), owner ?? 'disconnected'))}>Refresh listing and review terms</button>}
+      {tx.phase.stage === 'failed' && <button onClick={() => void refresh([solanaKey.listing(mint), solanaKey.escrow(mint), solanaKey.token(paymentMint.toBase58(), owner ?? 'disconnected')]).catch(console.error)}>Refresh listing and review terms</button>}
     </div>}
   </article>;
 }
