@@ -6,7 +6,7 @@ A production-oriented Web3 engineering case study spanning EVM, Solana, and Sui.
 
 ## What this project demonstrates
 
-- **Shared application identity:** signed wallet proofs establish a UUID account and HttpOnly session; SQLite stores identity, never marketplace settlement.
+- **Shared application identity:** signed wallet proofs establish a UUID account and HttpOnly session; PostgreSQL stores identity, never marketplace settlement.
 - **Resource-driven execution:** a vehicle's ecosystem determines the required linked execution wallet, independently of the wallet used to log in.
 - **Three native marketplaces:** noncustodial ERC-721 listings on EVM, PDA-controlled SPL escrow on Solana, and shared Listing objects wrapping Vehicles on Sui.
 - **Explicit correctness boundaries:** reviewed purchase intent, two-proof wallet linking, and read-only reconciliation retries after successful transactions.
@@ -15,7 +15,7 @@ A production-oriented Web3 engineering case study spanning EVM, Solana, and Sui.
 
 ```mermaid
 flowchart TD
-    Browser["Browser / React"] <-->|"Session and wallet proofs"| Identity["Application identity API / SQLite"]
+    Browser["Browser / React"] <-->|"Session and wallet proofs"| Identity["Application identity API / PostgreSQL"]
     Browser --> Resolver["Execution resolver / readiness"]
     Resolver --> EVMFlow["EVM client + wallet"]
     Resolver --> SolanaFlow["Solana client + wallet"]
@@ -54,7 +54,7 @@ The [trust-boundary document](docs/architecture/trust-boundaries.md) explains wh
 | Path | Responsibility |
 | --- | --- |
 | `apps/web/` | React catalog, wallet connections, identity UI, execution readiness and native transaction flows |
-| `apps/api/` | Fastify/SQLite identity, wallet proofs and sessions |
+| `apps/api/` | Fastify/PostgreSQL identity, wallet proofs and sessions |
 | `packages/contracts/` | Solidity marketplace, ERC-721/MockUSDC, Foundry tests and local deployment |
 | `packages/solana/` | Anchor program, manual TypeScript client, local fixtures and offline/validator suites |
 | `packages/sui/` | Move marketplace/scenarios and TypeScript object parsers/transaction builders |
@@ -62,7 +62,7 @@ The [trust-boundary document](docs/architecture/trust-boundaries.md) explains wh
 
 ## Tech stack
 
-React / Vite / TypeScript · TanStack Query · Wagmi / Viem / RainbowKit · Fastify / Node SQLite · Solidity / Foundry / OpenZeppelin · Solana / Anchor / SPL Token / Wallet Adapter · Sui / Move / Mysten SDK and dApp Kit.
+React / Vite / TypeScript · TanStack Query · Wagmi / Viem / RainbowKit · Fastify / PostgreSQL · Solidity / Foundry / OpenZeppelin · Solana / Anchor / SPL Token / Wallet Adapter · Sui / Move / Mysten SDK and dApp Kit.
 
 ## Verification status
 
@@ -74,11 +74,14 @@ React / Vite / TypeScript · TanStack Query · Wagmi / Viem / RainbowKit · Fast
 
 ## Quick start
 
-Use Node 24 and the repository-pinned pnpm 10.26.0. To install and start the identity API with its localhost defaults:
+Use Node 24 and the repository-pinned pnpm 10.26.0. Create a local PostgreSQL database first using [the persistence setup](docs/operations/postgres.md#local-postgresql-setup). Then install, customize the ignored API environment file with its server-only `DATABASE_URL`, apply migrations and start the API:
 
 ```bat
 pnpm install --frozen-lockfile
-pnpm api:dev
+cd apps\api
+copy .env.example .env
+pnpm exec tsx --env-file=.env src/init-db.ts
+pnpm exec tsx watch --env-file=.env src/index.ts
 ```
 
 In a second terminal:
@@ -89,9 +92,9 @@ pnpm dev
 
 Open `http://localhost:5173`. This starts the frontend and identity service; trading requires chain services and deployed resources. Keep the frontend on port 5173 and use `localhost` consistently for browser/API cookies and Origin checks.
 
-Public browser configuration is described in [apps/web/.env.example](apps/web/.env.example); copy it to `apps/web/.env.local` when configuring chains. [apps/api/.env.example](apps/api/.env.example) describes optional server overrides; the API uses defaults unless variables are exported or explicitly loaded. See [setup and environment loading](docs/operations/verification.md#local-setup-boundaries) for submodules, Foundry, and full chain setup.
+Public browser configuration is described in [apps/web/.env.example](apps/web/.env.example); copy it to `apps/web/.env.local` when configuring chains. [apps/api/.env.example](apps/api/.env.example) describes the required database connection and optional server overrides; variables must be exported or explicitly loaded. See [setup and environment loading](docs/operations/verification.md#local-setup-boundaries) for submodules, Foundry, and full chain setup.
 
-[Vercel Services deployment scaffolding](docs/operations/vercel.md) adds one project with a public `/api` Fastify service and a Vite web service. Hosted API startup is intentionally blocked until SQLite identity storage is replaced with durable shared storage; local development remains available.
+[Vercel Services deployment](docs/operations/vercel.md) adds one project with a public `/api` Fastify service and a Vite web service. Configure isolated Preview/Production PostgreSQL connections (Neon is the hosted target) and run migrations explicitly. Hosted routing, database connections and public chain deployments still require verification.
 
 ## AI-assisted engineering workflow
 

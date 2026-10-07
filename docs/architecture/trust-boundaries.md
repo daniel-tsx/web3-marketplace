@@ -25,8 +25,9 @@ create chain-level access control.
 [server.ts](../../apps/api/src/server.ts) verifies the exact stored challenge, bound
 to origin, ecosystem, normalized address, purpose and expiry. Linking additionally
 binds the stored challenge to the current session user. Challenge consumption and
-identity writes occur in an SQLite transaction. A unique ecosystem/address pair
-prevents a wallet belonging to two users.
+identity writes occur in one PostgreSQL transaction, with row locks and expiry
+checks after lock waits. A unique ecosystem/address pair prevents a wallet
+belonging to two users, including across API instances.
 
 Wallet linking additionally requires fresh authorization from an already-linked
 wallet and fresh ownership proof from the new wallet. Both messages bind the
@@ -42,12 +43,12 @@ Solana, Mysten personal-message verification for Sui. EVM is lowercase-normalize
 Solana base58 comparisons remain case-sensitive, and Sui addresses are canonicalized.
 
 The browser sends credentials with API requests; JavaScript does not store the
-session token. SQLite stores only its hash. The API checks the configured Origin
+session token. PostgreSQL stores only its hash. The API checks the configured Origin
 on POSTs and uses an HttpOnly, SameSite=Lax cookie with Path `/` and no Domain.
 Cookies are Secure when the configured frontend origin uses HTTPS; local HTTP
-remains supported. [Vercel scaffolding](../operations/vercel.md) preserves these
-boundaries but blocks hosted API startup pending durable shared identity storage.
-The API's Run 2 → Run 3 migration preserves identity rows rather than deleting the database.
+remains supported. [Vercel deployment](../operations/vercel.md) preserves these
+boundaries through same-origin routing. [PostgreSQL migrations and SQLite cutover](../operations/postgres.md)
+preserve existing identity/session rows; no runtime SQLite fallback remains.
 
 ## Custody and purchase intent
 

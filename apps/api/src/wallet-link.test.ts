@@ -1,20 +1,20 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { privateKeyToAccount } from 'viem/accounts';
 import { Keypair } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Secp256k1Keypair } from '@mysten/sui/keypairs/secp256k1';
 import type { Ecosystem } from './db.js';
-import { openDatabase } from './db.js';
+import { createTestDatabase } from './test-db.js';
 import { buildServer } from './server.js';
 
 const ORIGIN = 'http://localhost:5173';
 const owner = privateKeyToAccount('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 const attacker = privateKeyToAccount('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
 
-test('a stolen session plus only the new wallet proof cannot create a login credential', async () => {
-  const db = openDatabase(':memory:');
+test('a stolen session plus only the new wallet proof cannot create a login credential', async (t) => {
+  const db = (await createTestDatabase(t)).db;
   const app = await buildServer(db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   try {
@@ -36,7 +36,7 @@ test('a stolen session plus only the new wallet proof cannot create a login cred
     const forged = await post('/wallets/link/verify', { ...proof, authorizerSignature: await attacker.signMessage({ message: challenge.authorizer.message }) }, stolenCookie);
     assert.equal(forged.statusCode, 401);
     assert.equal(forged.json().error.code, 'invalid_reauthentication');
-    assert.equal(db.prepare('SELECT id FROM wallets WHERE address = ?').get(attacker.address.toLowerCase()), undefined);
+    assert.equal((await db.query('SELECT id FROM wallets WHERE address = $1', [attacker.address.toLowerCase()])).rows[0], undefined);
   } finally { await app.close(); }
 });
 
@@ -56,8 +56,8 @@ function signingWallet(ecosystem: Ecosystem, secp = false): SigningWallet {
   return { ecosystem, address: account.toSuiAddress(), sign: async (message) => (await account.signPersonalMessage(new TextEncoder().encode(message))).signature };
 }
 
-async function fixture() {
-  const db = openDatabase(':memory:');
+async function fixture(t: TestContext) {
+  const db = (await createTestDatabase(t)).db;
   const app = await buildServer(db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   async function login(wallet: SigningWallet) {
@@ -79,8 +79,8 @@ async function fixture() {
 
 test('fresh trusted and new wallet proofs authorize every ecosystem pairing', async (t) => {
   for (const source of ['evm', 'solana', 'sui'] as const) for (const destination of ['evm', 'solana', 'sui'] as const) {
-    await t.test(`${source} authorizes a new ${destination} login wallet`, async () => {
-      const f = await fixture();
+    await t.test(`${source} authorizes a new ${destination} login wallet`, async (t) => {
+      const f = await fixture(t);
       try {
         const trusted = signingWallet(source);
         const target = signingWallet(destination, true);
@@ -107,8 +107,8 @@ test('fresh trusted and new wallet proofs authorize every ecosystem pairing', as
   }
 });
 
-test('an approval for target A cannot authorize target B or a different request', async () => {
-  const f = await fixture();
+test('an approval for target A cannot authorize target B or a different request', async (t) => {
+  const f = await fixture(t);
   try {
     const trusted = signingWallet('evm');
     const targetA = signingWallet('solana');
@@ -125,8 +125,8 @@ test('an approval for target A cannot authorize target B or a different request'
   } finally { await f.app.close(); }
 });
 
-test('login, wrong-origin, and wrong-role signatures cannot serve as link approval', async () => {
-  const f = await fixture();
+test('login, wrong-origin, and wrong-role signatures cannot serve as link approval', async (t) => {
+  const f = await fixture(t);
   try {
     const trusted = signingWallet('sui');
     const target = signingWallet('sui', true);
@@ -146,15 +146,15 @@ test('login, wrong-origin, and wrong-role signatures cannot serve as link approv
 });
 
 test('expired and replayed approvals are rejected for all trusted-wallet ecosystems', async (t) => {
-  for (const ecosystem of ['evm', 'solana', 'sui'] as const) await t.test(ecosystem, async () => {
-    const f = await fixture();
+  for (const ecosystem of ['evm', 'solana', 'sui'] as const) await t.test(ecosystem, async (t) => {
+    const f = await fixture(t);
     try {
       const trusted = signingWallet(ecosystem);
       const target = signingWallet('evm');
       const session = await f.login(trusted);
       const expired = await f.issue(session.cookie, trusted, target);
       const expiredProof = await f.proofs(expired, trusted, target);
-      f.db.prepare('UPDATE auth_challenges SET expires_at = 0 WHERE id = ?').run(expired.challengeId);
+      await f.db.query('UPDATE auth_challenges SET expires_at = 0 WHERE id = $1', [expired.challengeId]);
       assert.equal((await f.post('/wallets/link/verify', expiredProof, session.cookie)).json().error.code, 'challenge_expired');
       const fresh = await f.issue(session.cookie, trusted, target);
       const freshProof = await f.proofs(fresh, trusted, target);
@@ -167,8 +167,8 @@ test('expired and replayed approvals are rejected for all trusted-wallet ecosyst
   });
 });
 
-test('the approver must belong to this user, and the originating session must remain live', async () => {
-  const f = await fixture();
+test('the approver must belong to this user, and the originating session must remain live', async (t) => {
+  const f = await fixture(t);
   try {
     const trusted = signingWallet('solana');
     const other = signingWallet('evm');
@@ -189,33 +189,31 @@ test('the approver must belong to this user, and the originating session must re
 
 test('session, trusted-wallet membership and expiry are rechecked at commit time', async (t) => {
   for (const condition of ['session', 'trusted wallet', 'challenge expiry'] as const) await t.test(condition, async (t) => {
-    const f = await fixture();
+    const f = await fixture(t);
     try {
       const trusted = signingWallet('evm');
       const target = signingWallet('solana');
       const session = await f.login(trusted);
       const challenge = await f.issue(session.cookie, trusted, target);
       const proof = await f.proofs(challenge, trusted, target);
-      const exec = f.db.exec.bind(f.db);
+      const transaction = f.db.transaction.bind(f.db);
       // Deterministically change real DB state after cryptographic verification, at the commit boundary.
-      t.mock.method(f.db, 'exec', (sql: string) => {
-        if (sql === 'BEGIN IMMEDIATE') {
-          if (condition === 'session') f.db.prepare('UPDATE sessions SET expires_at = 0').run();
-          if (condition === 'trusted wallet') f.db.prepare('DELETE FROM wallets WHERE user_id = ?').run(session.userId);
-          if (condition === 'challenge expiry') f.db.prepare('UPDATE auth_challenges SET expires_at = 0 WHERE id = ?').run(challenge.challengeId);
-        }
-        exec(sql);
+      t.mock.method(f.db, 'transaction', async (work: Parameters<typeof transaction>[0]) => {
+        if (condition === 'session') await f.db.query('UPDATE sessions SET expires_at = 0');
+        if (condition === 'trusted wallet') await f.db.query('DELETE FROM wallets WHERE user_id = $1', [session.userId]);
+        if (condition === 'challenge expiry') await f.db.query('UPDATE auth_challenges SET expires_at = 0 WHERE id = $1', [challenge.challengeId]);
+        return transaction(work);
       });
       const result = await f.post('/wallets/link/verify', proof, session.cookie);
       assert.equal(result.json().error.code, condition === 'session' ? 'invalid_link_session' : condition === 'trusted wallet' ? 'untrusted_wallet' : 'challenge_expired');
-      assert.equal(f.db.prepare('SELECT id FROM wallets WHERE address = ?').get(target.address), undefined);
-      assert.equal((f.db.prepare('SELECT consumed_at FROM auth_challenges WHERE id = ?').get(challenge.challengeId) as { consumed_at: number | null }).consumed_at, null);
+      assert.equal((await f.db.query('SELECT id FROM wallets WHERE address = $1', [target.address])).rows[0], undefined);
+      assert.equal((await f.db.query('SELECT consumed_at FROM auth_challenges WHERE id = $1', [challenge.challengeId])).rows[0].consumed_at, null);
     } finally { await f.app.close(); }
   });
 });
 
-test('concurrent verification consumes approval once; retries never duplicate credentials', async () => {
-  const f = await fixture();
+test('concurrent verification consumes approval once; retries never duplicate credentials', async (t) => {
+  const f = await fixture(t);
   try {
     const trusted = signingWallet('evm');
     const target = signingWallet('sui', true);
@@ -227,12 +225,12 @@ test('concurrent verification consumes approval once; retries never duplicate cr
     assert.equal(responses.find((response) => response.statusCode === 409)!.json().error.code, 'challenge_used');
     const again = await f.issue(session.cookie, trusted, target);
     assert.equal((await f.post('/wallets/link/verify', await f.proofs(again, trusted, target), session.cookie)).statusCode, 200);
-    assert.equal((f.db.prepare('SELECT count(*) AS count FROM wallets WHERE user_id = ?').get(session.userId) as { count: number }).count, 2);
+    assert.equal((await f.db.query('SELECT count(*) AS count FROM wallets WHERE user_id = $1', [session.userId])).rows[0].count, 2);
   } finally { await f.app.close(); }
 });
 
-test('wallet ownership conflicts roll back approval consumption and legacy links fail closed', async () => {
-  const f = await fixture();
+test('wallet ownership conflicts roll back approval consumption and legacy links fail closed', async (t) => {
+  const f = await fixture(t);
   try {
     const trusted = signingWallet('solana');
     const target = signingWallet('evm');
@@ -241,9 +239,9 @@ test('wallet ownership conflicts roll back approval consumption and legacy links
     const challenge = await f.issue(session.cookie, trusted, target);
     const result = await f.post('/wallets/link/verify', await f.proofs(challenge, trusted, target), session.cookie);
     assert.equal(result.json().error.code, 'wallet_owned');
-    assert.equal((f.db.prepare('SELECT consumed_at FROM auth_challenges WHERE id = ?').get(challenge.challengeId) as { consumed_at: number | null }).consumed_at, null);
+    assert.equal((await f.db.query('SELECT consumed_at FROM auth_challenges WHERE id = $1', [challenge.challengeId])).rows[0].consumed_at, null);
     assert.equal((await f.login(target)).userId, other.userId);
-    f.db.prepare('DELETE FROM wallet_link_requests WHERE challenge_id = ?').run(challenge.challengeId);
+    await f.db.query('DELETE FROM wallet_link_requests WHERE challenge_id = $1', [challenge.challengeId]);
     assert.equal((await f.post('/wallets/link/verify', await f.proofs(challenge, trusted, target), session.cookie)).json().error.code, 'reauthentication_required');
   } finally { await f.app.close(); }
 });

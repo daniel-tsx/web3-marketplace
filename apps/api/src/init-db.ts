@@ -1,6 +1,12 @@
-import { resolve } from 'node:path';
 import { openDatabase } from './db.js';
+import { readDatabaseUrl } from './config.js';
+import { migrate } from './migrate.js';
 
-const path = resolve(process.env.DATABASE_PATH ?? '.local/auth.sqlite');
-openDatabase(path).close();
-console.log(`Authentication schema ready: ${path}`);
+const db = openDatabase(readDatabaseUrl(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL));
+try {
+  await migrate(db);
+  console.log('Authentication PostgreSQL migrations applied.');
+} catch {
+  console.error('Database migration failed; check connectivity, permissions and migration history.');
+  process.exitCode = 1;
+} finally { await db.close(); }

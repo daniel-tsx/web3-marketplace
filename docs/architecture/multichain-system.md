@@ -12,7 +12,7 @@ The pnpm workspace contains two applications and three chain packages:
 | Boundary | Responsibility |
 | --- | --- |
 | [apps/web](../../apps/web/) | Vite/React SPA; application session query, wallet connection/signing, readiness resolution, chain-specific cards, reads and transaction UI. |
-| [apps/api](../../apps/api/) | Fastify identity service with Node SQLite; challenges, signature proofs, user/wallet associations and opaque sessions. No marketplace persistence. |
+| [apps/api](../../apps/api/) | Fastify identity service with PostgreSQL; challenges, signature proofs, user/wallet associations and opaque sessions. No marketplace persistence. |
 | [packages/contracts](../../packages/contracts/) | Solidity contracts, Foundry tests and local Anvil deployment. Build artifacts supply generated frontend ABIs. |
 | [packages/solana](../../packages/solana/) | Anchor Rust program, manual TypeScript client, local preparation/seeding, offline encoding and validator tests. |
 | [packages/sui](../../packages/sui/) | Move package/scenarios and TypeScript BCS parsers/transaction builders. Deployment is external to the frontend/API. |

@@ -17,6 +17,20 @@ jobs:
     name: Node and EVM verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: vehicle_test
+          POSTGRES_DB: vehicle_auth_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vehicle_test -d vehicle_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout including forge-std
         uses: actions/checkout@v6
@@ -51,6 +65,8 @@ jobs:
         run: pnpm contracts:test
 
       - name: Test API identity and wallet linking
+        env:
+          TEST_DATABASE_URL: postgresql://vehicle_test@127.0.0.1:5432/vehicle_auth_test
         run: pnpm api:test
 
       - name: Test frontend execution and reconciliation

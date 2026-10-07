@@ -11,6 +11,7 @@
     "dev": "pnpm --dir apps/web dev",
     "api:dev": "pnpm --dir apps/api dev",
     "api:db": "pnpm --dir apps/api db",
+    "api:db:import": "pnpm --dir apps/api db:import",
     "api:test": "pnpm --dir apps/api test",
     "execution:test": "pnpm --dir apps/web test",
     "solana:prepare": "pnpm --dir packages/solana prepare:local",

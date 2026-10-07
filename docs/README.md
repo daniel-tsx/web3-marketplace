@@ -15,7 +15,8 @@ truth and source paths; follow [AGENTS.md](../AGENTS.md) for behavioral policy.
 | Current system boundaries and chain comparison | [Multichain system](architecture/multichain-system.md) |
 | Identity, custody, authorization and result boundaries | [Trust boundaries](architecture/trust-boundaries.md) |
 | Verification commands, prerequisites and host limitations | [Verification](operations/verification.md) |
-| Vercel Services target, environment and storage blocker | [Vercel deployment](operations/vercel.md) |
+| Vercel Services target, environment and deployment prerequisites | [Vercel deployment](operations/vercel.md) |
+| PostgreSQL identity schema, migrations and SQLite cutover | [PostgreSQL persistence](operations/postgres.md) |
 | H1 intent invariant and deployment compatibility | [Audit fix 01](audit-fix-01-purchase-intent.md) |
 | H2 credential-change invariant | [Trust boundaries](architecture/trust-boundaries.md#proofs-replay-and-persistence); [Audit fix 02](audit-fix-02-wallet-link-reauthentication.md) records the implementation. |
 | H3 execution/reconciliation invariant | [Trust boundaries](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success) |
@@ -37,7 +38,7 @@ and tests are linked in [the source-of-truth map](AGENT_START_HERE.md#source-of-
 | EVM contracts/client | [Run 1](run-01-evm-baseline.md), [H1](audit-fix-01-purchase-intent.md), relevant [verification row](operations/verification.md#command-matrix) | Solidity and Foundry tests; VehicleCard/read/transaction hooks; ABI exporter when signatures change. |
 | Solana program/client | [Run 2](run-02-auth-solana-multichain.md), [H1](audit-fix-01-purchase-intent.md), [verification](operations/verification.md) | Anchor Rust/accounts, manual TypeScript encoder, offline and validator suites, Solana hooks/card. |
 | Sui Move/client | [Run 3](run-03-sui-multichain.md), [H1 Sui section](audit-fix-01-purchase-intent.md#sui-mechanism), [verification](operations/verification.md) | Move sources/scenarios, BCS parsers/builders, Sui result handling, query keys and card. |
-| Authentication/identity | [Trust boundaries](architecture/trust-boundaries.md), [Run 2 identity/proofs](run-02-auth-solana-multichain.md), [Run 3 Sui proofs/migration](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | API server/database/tests; auth browser client, session query and AccountPanel. |
+| Authentication/identity | [Trust boundaries](architecture/trust-boundaries.md), [PostgreSQL persistence](operations/postgres.md), [Run 2 identity/proofs](run-02-auth-solana-multichain.md), [Run 3 Sui proofs](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | API server/database/migrations/tests; auth browser client, session query and AccountPanel. |
 | Frontend cross-chain execution | [Multichain system](architecture/multichain-system.md), [Trust boundaries](architecture/trust-boundaries.md), relevant run's flow (plus H1 for purchases) | App, bootstrap, resolver/tests, affected chain's card/reads/confirmation hook. |
 | Setup or check failures | [Verification](operations/verification.md), affected run's setup section | Relevant manifests/config, public configuration readers and local scripts; never print env/key files. |
 | Workflow/documentation | [AI_WORKFLOW](AI_WORKFLOW.md), this lifecycle, [known drift](AGENT_START_HERE.md#known-documentation-drift) | Owning document, referenced source, package scripts and local links. |

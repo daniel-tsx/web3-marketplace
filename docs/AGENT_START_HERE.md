@@ -25,10 +25,10 @@ format, see [AI_WORKFLOW](AI_WORKFLOW.md).
   linking needs a live originating session plus fresh trusted-wallet authorization
   and new-wallet ownership proofs for that exact credential change; connection/account switching does not relink
   wallets. Login ecosystem does not select the chain used for a purchase.
-- **API persistence:** Fastify plus Node's synchronous SQLite stores only users,
+- **API persistence:** Fastify plus PostgreSQL stores only users,
   linked wallets, challenges, hashed session tokens and per-request link authorization
-  context. Startup/database init
-  preserves Run 2 identity rows while widening ecosystem constraints for Sui.
+  context. Explicit SQL migrations reproduce the schema; an optional read-only
+  SQLite importer preserves old identity/session rows. There is no runtime SQLite fallback.
 - **EVM:** local Anvil marketplace, ERC-721 vehicles, six-decimal MockUSDC,
   noncustodial listings, NFT approval and ERC-20 allowance, receipt-based results.
 - **Solana:** Anchor program with a persistent Listing PDA and escrow ATA, a
@@ -58,7 +58,7 @@ format, see [AI_WORKFLOW](AI_WORKFLOW.md).
 | --- | --- |
 | Workspace | pnpm `10.26.0`, Node 24+, TypeScript; manifests in [root](../package.json), [API](../apps/api/package.json), [web](../apps/web/package.json), [contracts](../packages/contracts/package.json), [Solana](../packages/solana/package.json), [Sui](../packages/sui/package.json). |
 | Browser | Vite 6 / React 18, TanStack Query 5, Wagmi 2 / Viem 2 / RainbowKit 2; Solana Wallet Adapter (Phantom), web3.js 1 / SPL Token; Mysten Sui SDK 2 / dApp Kit React 1 using gRPC. These are manifest major versions, not exact installed versions. |
-| API | Fastify 5, cookie/CORS plugins, `node:sqlite`; Viem message verification, TweetNaCl Ed25519, Mysten personal-message verification. |
+| API | Fastify 5, cookie/CORS plugins, `pg`/PostgreSQL; Viem message verification, TweetNaCl Ed25519, Mysten personal-message verification. |
 | Chain tools | Foundry + Solidity 0.8.24 + OpenZeppelin 5 / forge-std; Rust + Anchor 0.32.1 / anchor-spl; Sui Move edition 2024. |
 | Checks | Node test runner via `tsx`, Foundry tests, Anchor validator tests, Move scenario tests, TypeScript, frontend ESLint 9 and Vite build. |
 
@@ -93,7 +93,7 @@ run guides are deeper, scoped references rather than competing current summaries
 | Solana program/client | [Rust program](../packages/solana/programs/vehicle_marketplace/src/lib.rs), [client](../packages/solana/src/client.ts), [tests](../packages/solana/tests/), [Solana hooks](../apps/web/src/web3/solana/), [card](../apps/web/src/components/SolanaVehicleCard.tsx) | [Run 2](run-02-auth-solana-multichain.md); [H1](audit-fix-01-purchase-intent.md#solana-mechanism) | Program owns PDA/escrow invariants; manual client layout must match Rust; validator proof pending. |
 | Sui Move/client | [Move sources](../packages/sui/move/sources/), [Move tests](../packages/sui/move/tests/), [client/tests](../packages/sui/), [Sui hooks](../apps/web/src/web3/sui/), [card](../apps/web/src/components/SuiVehicleCard.tsx) | [Run 3](run-03-sui-multichain.md); [H1 Sui mechanism](audit-fix-01-purchase-intent.md#sui-mechanism) | Move owns object/payment invariants; manual BCS layouts must match; Move proof pending. |
 | Transaction-state UI | [EVM flow](../apps/web/src/web3/useTransactionFlow.ts), [status](../apps/web/src/components/TransactionStatus.tsx), [Solana flow](../apps/web/src/web3/solana/useSolanaTransaction.ts), [Sui flow](../apps/web/src/web3/sui/useSuiTransaction.ts) | [Trust boundaries](architecture/trust-boundaries.md#transaction-results-and-partial-failures); chain run guides | Submission, execution result, and refreshed reads are separate states. |
-| API persistence | [Database](../apps/api/src/db.ts), [startup](../apps/api/src/index.ts), [init](../apps/api/src/init-db.ts), [tests](../apps/api/src/server.test.ts) | [Trust boundaries](architecture/trust-boundaries.md); [Run 3 migration](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | SQLite owns identity only; no listings, balances, custody, or settlement. |
+| API persistence | [Database](../apps/api/src/db.ts), [migrations](../apps/api/migrations/), [migration runner](../apps/api/src/migrate.ts), [SQLite importer](../apps/api/src/sqlite-import.ts), [tests](../apps/api/src/db.test.ts) | [PostgreSQL persistence](operations/postgres.md); [Trust boundaries](architecture/trust-boundaries.md) | PostgreSQL owns identity only; no listings, balances, custody, or settlement. |
 | Environment/configuration | [EVM config](../apps/web/src/contracts/config.ts), [addresses](../apps/web/src/contracts/addresses.ts), [Sui config](../apps/web/src/web3/sui/config.ts), [bootstrap](../apps/web/src/bootstrap.tsx), [API startup](../apps/api/src/index.ts), [address sync](../scripts/sync-addresses.mjs), [Solana seed](../packages/solana/scripts/seed.ts), [Anchor config](../packages/solana/Anchor.toml) | [Verification/setup notes](operations/verification.md#local-setup-boundaries); root README and run setup sections | Public browser config only; EVM/Solana scripts target local chains; Sui needs an explicit deployment. |
 | Verification/tests | [Root scripts](../package.json), workspace manifests above, [contracts](../packages/contracts/test/), [API](../apps/api/src/server.test.ts), [frontend](../apps/web/package.json), [Solana](../packages/solana/tests/), [Sui](../packages/sui/tests/), [Move](../packages/sui/move/tests/) | [Verification](operations/verification.md) | Distinguish offline, compiler, runtime, and actual wallet evidence. |
 | Audit fixes | Chain sources/clients above, [purchase errors/tests](../apps/web/src/web3/purchaseIntent.test.ts), [wallet-link tests](../apps/api/src/wallet-link.test.ts), [reconciliation tests](../apps/web/src/web3/reconciliation.test.ts) | [H1 audit fix](audit-fix-01-purchase-intent.md), [H2 implementation](audit-fix-02-wallet-link-reauthentication.md), [H3 result boundary](architecture/trust-boundaries.md#h3-execution-success-is-separate-from-reconciliation-success) | Preserve purchase intent, credential-change authorization and execution success separately from read reconciliation. |
@@ -102,6 +102,10 @@ run guides are deeper, scoped references rather than competing current summaries
 
 Existing run guides stay at their current paths for a later historical cleanup.
 Use this map and H1 when interpreting them:
+
+- Run 2/3 and H2's original SQLite/init descriptions predate PostgreSQL.
+  [The persistence guide](operations/postgres.md) owns the current schema,
+  explicit migration/import commands and mandatory server-only database URL.
 
 - [Run 1](run-01-evm-baseline.md) is historical: its future-runs paragraph still
   anticipates already implemented identity/Solana/Sui, provider ownership has

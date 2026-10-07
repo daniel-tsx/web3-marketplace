@@ -9,7 +9,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openDatabase } from './db.js';
+import { createTestDatabase } from './test-db.js';
+import { importSQLite } from './sqlite-import.js';
 import { buildServer } from './server.js';
 
 const ORIGIN = 'http://localhost:5173';
@@ -20,8 +21,8 @@ const solB = Keypair.generate();
 const suiA = new Ed25519Keypair();
 const suiB = new Secp256k1Keypair();
 
-test('EVM login, exact challenge, replay and expiry', async () => {
-  const db = openDatabase(':memory:');
+test('EVM login, exact challenge, replay and expiry', async (t) => {
+  const db = (await createTestDatabase(t)).db;
   const app = await buildServer(db);
   const post = (url: string, payload: object) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN }, payload });
   try {
@@ -40,7 +41,7 @@ test('EVM login, exact challenge, replay and expiry', async () => {
     const replay = await post('/auth/verify', { challengeId: issued.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: issued.message }) });
     assert.equal(replay.json().error.code, 'challenge_used');
     const expired = (await post('/auth/challenge', { ecosystem: 'evm', address: evmA.address })).json();
-    db.prepare('UPDATE auth_challenges SET expires_at = 0 WHERE id = ?').run(expired.challengeId);
+    await db.query('UPDATE auth_challenges SET expires_at = 0 WHERE id = $1', [expired.challengeId]);
     const expiredResponse = await post('/auth/verify', { challengeId: expired.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: expired.message }) });
     assert.equal(expiredResponse.json().error.code, 'challenge_expired');
     const logout = await app.inject({ method: 'POST', url: '/logout', headers: { origin: ORIGIN, cookie } });
@@ -49,9 +50,9 @@ test('EVM login, exact challenge, replay and expiry', async () => {
   } finally { await app.close(); }
 });
 
-test('HTTPS origin uses secure cookies and rejects other origins', async () => {
+test('HTTPS origin uses secure cookies and rejects other origins', async (t) => {
   const origin = 'https://marketplace.example';
-  const app = await buildServer(openDatabase(':memory:'), origin);
+  const app = await buildServer((await createTestDatabase(t)).db, origin);
   const post = (url: string, payload: object) => app.inject({ method: 'POST', url, headers: { origin }, payload });
   try {
     const forbidden = await app.inject({ method: 'POST', url: '/auth/challenge', headers: { origin: ORIGIN }, payload: { ecosystem: 'evm', address: evmA.address } });
@@ -76,8 +77,8 @@ test('HTTPS origin uses secure cookies and rejects other origins', async () => {
   } finally { await app.close(); }
 });
 
-test('Solana login and invalid Ed25519 signature', async () => {
-  const app = await buildServer(openDatabase(':memory:'));
+test('Solana login and invalid Ed25519 signature', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db);
   const post = (url: string, payload: object) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN }, payload });
   try {
     const address = solA.publicKey.toBase58();
@@ -92,8 +93,8 @@ test('Solana login and invalid Ed25519 signature', async () => {
   } finally { await app.close(); }
 });
 
-test('linking requires session and proof; a wallet cannot belong to two users', async () => {
-  const app = await buildServer(openDatabase(':memory:'));
+test('linking requires session and proof; a wallet cannot belong to two users', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   async function login(account: typeof evmA) {
     const issued = (await post('/auth/challenge', { ecosystem: 'evm', address: account.address })).json();
@@ -124,8 +125,8 @@ test('linking requires session and proof; a wallet cannot belong to two users', 
   } finally { await app.close(); }
 });
 
-test('Solana login links an EVM wallet to the same application user', async () => {
-  const app = await buildServer(openDatabase(':memory:'));
+test('Solana login links an EVM wallet to the same application user', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   try {
     const solanaAddress = solB.publicKey.toBase58();
@@ -144,8 +145,8 @@ test('Solana login links an EVM wallet to the same application user', async () =
   } finally { await app.close(); }
 });
 
-test('Sui login verifies exact personal message, rejects replay, and can link EVM', async () => {
-  const app = await buildServer(openDatabase(':memory:'));
+test('Sui login verifies exact personal message, rejects replay, and can link EVM', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   const address = suiA.toSuiAddress();
   try {
@@ -167,8 +168,8 @@ test('Sui login verifies exact personal message, rejects replay, and can link EV
   } finally { await app.close(); }
 });
 
-test('EVM session links Sui once; another user cannot claim it', async () => {
-  const app = await buildServer(openDatabase(':memory:'));
+test('EVM session links Sui once; another user cannot claim it', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db);
   const post = (url: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url, headers: { origin: ORIGIN, ...(cookie ? { cookie } : {}) }, payload });
   async function login(account: typeof evmA) {
     const challenge = (await post('/auth/challenge', { ecosystem: 'evm', address: account.address })).json();
@@ -192,7 +193,7 @@ test('EVM session links Sui once; another user cannot claim it', async () => {
   } finally { await app.close(); }
 });
 
-test('Run 2 SQLite identity rows migrate without a reset', () => {
+test('Run 2 SQLite identity rows import into PostgreSQL without a reset', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'vehicle-auth-'));
   const path = join(directory, 'auth.sqlite');
   try {
@@ -207,11 +208,10 @@ test('Run 2 SQLite identity rows migrate without a reset', () => {
       INSERT INTO sessions VALUES ('s','u','hash',1,9999999999999);
     `);
     old.close();
-    const migrated = openDatabase(path);
-    assert.equal((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 4);
-    assert.equal((migrated.prepare('SELECT address FROM wallets WHERE id = ?').get('w') as { address: string }).address, '0xabc');
-    assert.equal((migrated.prepare('SELECT user_id FROM sessions WHERE id = ?').get('s') as { user_id: string }).user_id, 'u');
-    migrated.prepare("INSERT INTO wallets VALUES ('new','u','sui',?,2,2)").run(suiA.toSuiAddress());
-    migrated.close();
+    const { db: migrated } = await createTestDatabase(t);
+    await importSQLite(migrated, path);
+    assert.equal((await migrated.query('SELECT address FROM wallets WHERE id = $1', ['w'])).rows[0].address, '0xabc');
+    assert.equal((await migrated.query('SELECT user_id FROM sessions WHERE id = $1', ['s'])).rows[0].user_id, 'u');
+    await migrated.query("INSERT INTO wallets VALUES ('new','u','sui',$1,2,2)", [suiA.toSuiAddress()]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

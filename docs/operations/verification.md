@@ -2,7 +2,8 @@
 
 Status: **current**. This is the command/prerequisite owner. Run commands from the
 repository root in Command Prompt unless noted. Root
-[package.json](../../package.json) pins pnpm `10.26.0`; Node 24+ supplies `node:sqlite`.
+[package.json](../../package.json) pins pnpm `10.26.0`; use Node 24. PostgreSQL is
+required for API runtime/tests; `node:sqlite` is used only by the cutover tool/tests.
 Install workspace dependencies before application checks. Chain tools are separate
 from `pnpm install`.
 
@@ -37,7 +38,7 @@ means the check's tools are present here, not that the check has just passed.
 | --- | --- | --- | --- |
 | Solidity compile + ABI export | `pnpm contracts:build` | Foundry/solc, OpenZeppelin and initialized forge-std submodule; regenerates [abis.ts](../../apps/web/src/contracts/abis.ts). | Available using local Foundry/PATH setup below. |
 | EVM tests | `pnpm contracts:test` | [Foundry suite](../../packages/contracts/test/VehicleMarketplace.t.sol), including H1; no Anvil or wallet needed. | Available using local Foundry/PATH setup. |
-| API tests | `pnpm api:test` | [Server tests](../../apps/api/src/server.test.ts), in-memory/temporary SQLite and cryptographic proofs/migration; no HTTP server or chain runtime needed. | Available. |
+| API tests | `pnpm api:test` | Real PostgreSQL with dedicated `TEST_DATABASE_URL`; isolated schemas test migrations, import, cryptographic proofs, H2 and concurrent instances. No chain runtime needed. | Available with local PostgreSQL; see [setup](postgres.md#local-postgresql-setup). |
 | Frontend execution tests | `pnpm execution:test` | Browser API URL configuration, resolver, Sui result/query/read helpers, purchase-error and [H3 reconciliation tests](../../apps/web/src/web3/reconciliation.test.ts) listed in [web scripts](../../apps/web/package.json); no browser/wallet needed. | Available; uses Vite-transformed API code, real query clients, controlled reads and a server-rendered EVM status. Does not test browser interaction or real wallet/RPC execution. |
 | TypeScript | `pnpm typecheck` | Recursive API/web/Solana/Sui typechecks; contracts package has no typecheck script. | Available; does not compile Rust or Move. |
 | Lint | `pnpm lint` | ESLint on `apps/web/src` only. | Available; not repository-wide lint. |
@@ -90,7 +91,7 @@ the old `sh` blocks' trailing `#` annotations are explanatory, not cmd syntax.
 
 | Configuration | Actual reader/behavior |
 | --- | --- |
-| API `DATABASE_PATH`, `FRONTEND_ORIGIN`, `API_PORT`, `API_HOST`, `PORT` | [config.ts](../../apps/api/src/config.ts) and [index.ts](../../apps/api/src/index.ts): defaults to package-local `.local/auth.sqlite`, `http://localhost:5173`, `127.0.0.1:3001`. Platform `PORT` takes precedence over `API_PORT`; containers can set `API_HOST=0.0.0.0`. `pnpm api:db` and `pnpm api:dev` initialize/migrate identity storage; they are setup mutations, not documentation checks. Hosted Vercel API startup is blocked until the [storage migration](vercel.md). |
+| API `DATABASE_URL`, `FRONTEND_ORIGIN`, `API_PORT`, `API_HOST`, `PORT` | [config.ts](../../apps/api/src/config.ts) and [index.ts](../../apps/api/src/index.ts): database URL required; origin/listener default to `http://localhost:5173`, `127.0.0.1:3001`. Platform `PORT` takes precedence; containers can set `API_HOST=0.0.0.0`. `pnpm api:db` explicitly applies schema; `api:dev` only starts the API. See [PostgreSQL setup/cutover](postgres.md) and [Vercel environment matrix](vercel.md#environment-matrix). |
 | `VITE_API_URL` | [auth/api.ts](../../apps/web/src/auth/api.ts): defaults to `http://localhost:3001` in Vite development and `/api` in production builds. Explicit URLs remain supported and trailing slashes are removed. Cookies require consistent frontend/API sites and the configured Origin. Keep Vite at 5173 locally and avoid mixing localhost/127.0.0.1 browser sites. See [Vercel communication](vercel.md#environment-and-communication) for combined development/deployment. |
 | `VITE_CHAIN_ID`, `VITE_RPC_URL`, EVM address variables | [config.ts](../../apps/web/src/contracts/config.ts) defaults to 31337 / `http://127.0.0.1:8545`; [addresses.ts](../../apps/web/src/contracts/addresses.ts) reads MockUSDC, VehicleNFT and Marketplace public addresses. Local deployment sync writes them to ignored `apps/web/.env.local`. |
 | `VITE_SOLANA_RPC_URL`, vehicle/payment mint variables | [bootstrap](../../apps/web/src/bootstrap.tsx) defaults RPC to `http://127.0.0.1:8899`; [App](../../apps/web/src/App.tsx) reads mint IDs. Program ID is compiled into [client.ts](../../packages/solana/src/client.ts), Rust and Anchor config; the seed-emitted `VITE_SOLANA_PROGRAM_ID` is unused. |
@@ -112,10 +113,10 @@ package ID unless explicitly configured. There is no effective Solana program-ID
 environment override. The local Solana scripts use `SOLANA_RPC_URL` if exported;
 their existing localhost default needs no separate example file.
 
-[apps/api/.env.example](../../apps/api/.env.example) lists the optional
-server overrides and platform port/container host conventions. Startup and
-`api:db` already use the shown defaults; copying a
-file does not change them because the API has no dotenv loader. To load customized
+[apps/api/.env.example](../../apps/api/.env.example) lists the required server-only
+database URL, optional server overrides and separate admin/test connections.
+Create a local PostgreSQL database and replace the safe connection placeholder;
+copying a file alone does not load it because the API has no dotenv loader. To load customized
 values explicitly with Node 24/tsx, enter the API directory first so the relative
 environment-file path resolves consistently, including through Windows launchers:
 
@@ -126,9 +127,9 @@ pnpm exec tsx --env-file=.env src/init-db.ts
 pnpm exec tsx watch --env-file=.env src/index.ts
 ```
 
-The init command initializes/migrates the configured identity database; the watch
-command starts the API and also initializes it. Use these only as intentional local
-setup steps. `DATABASE_PATH` resolves relative to `apps/api` for these commands.
+The init command applies migrations to the configured PostgreSQL database; the watch
+command only starts the API. Database setup is an intentional mutation; there is
+no automatic schema creation or SQLite fallback on startup.
 Exported server variables also work with the existing `api:db`/`api:dev` scripts.
 Local `.env` variants are ignored; `.env.example` files remain trackable.
 
@@ -145,6 +146,8 @@ not a ledger reset shortcut. No reset/migration/deployment is authorized by read
 dispatch with read-only repository permissions. A single Ubuntu job checks out
 submodules, installs Node 24 and pnpm from the root `packageManager` pin, and runs
 a frozen install. Foundry is pinned to `v1.8.3`, matching local verification.
+A disposable PostgreSQL service supplies `TEST_DATABASE_URL` only to the API
+test step; no production database credentials enter CI or the frontend build.
 The job builds Solidity, exports the frontend ABI and fails on any committed ABI
 drift before running contract tests and the frontend build. It also runs API,
 execution/reconciliation, Solana offline and Sui TypeScript tests, recursive

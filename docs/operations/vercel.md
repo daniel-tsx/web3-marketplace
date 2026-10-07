@@ -1,8 +1,9 @@
 # Vercel Services deployment
 
 Status: **current**. This owns the additional Vercel deployment target. The
-configuration is scaffolding: hosted API startup is intentionally blocked until
-identity storage is migrated. Local development continues to use SQLite.
+API uses PostgreSQL for durable identity storage. Hosted routing, Vercel database lifecycle
+and real blockchain flows still require verification; local checks do not establish
+a functional Vercel deployment.
 
 ## Deployment model and required work
 
@@ -43,35 +44,33 @@ exist only in server functions at runtime, not Vite builds or browser code. Do n
 create or populate a binding variable for browser API traffic. Both services are
 public through the route table; no service is internal-only.
 
-**Required before any hosted API deployment:** replace file-backed identity
-storage with durable shared storage in a separately scoped task. Vercel has no
-persistent shared filesystem for SQLite. `/tmp`, `:memory:`, container packaging,
-or an uploaded database file cannot preserve shared sessions, challenge consumption,
-wallet uniqueness and H2 transactions across instances/restarts. See
-[Vercel's SQLite limitation](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel).
-[API configuration](../../apps/api/src/config.ts) rejects hosted Vercel startup
-before opening a database, including attempts to set an ephemeral database path.
-Remove that guard only after implementing and verifying durable storage and its
-existing identity/authorization invariants. Storage credentials and migrations
-are deliberately not invented by this scaffolding.
+**Required before hosted API use:** configure a PostgreSQL database and apply
+the checked-in schema explicitly. [PostgreSQL persistence](postgres.md) owns
+migrations, local setup, Neon pooled/direct URLs and the optional read-only SQLite
+cutover. The API requires `DATABASE_URL` in every environment and has no SQLite
+fallback. Neither service build runs migrations or needs a database connection.
+The configured development Neon database passed pooled migration, schema, HTTP
+auth/race and process-restart checks; see [the Neon verification record](postgres.md#neon-verification-on-2026-10-07).
+That record does not establish Vercel runtime or browser-wallet behavior.
 
 ## Environment and communication
 
-The audit covers all **15 custom web variables**, all **7 API variables**, Vite's
-computed `DEV` flag, chain configuration writers and test/CI setup. The web uses
+The matrix covers all **15 custom web variables**, API runtime configuration,
+database administration/test variables, Vite's computed `DEV` flag and chain
+configuration writers. The web uses
 Vite's default public prefix; no configuration exposes arbitrary server variables.
-There are **no application secret or test-only environment variables currently
-required**. API sessions use random tokens stored as hashes, not an environment
-signing key. Future database credentials belong to the separate storage task.
+`DATABASE_URL` is a server-only secret; API tests require a dedicated
+`TEST_DATABASE_URL`. API sessions still use random tokens stored as hashes, not
+an environment signing key.
 
 ### Environment matrix
 
 All web rows are **public browser configuration**; their deployed network values
-are deployment-specific. API rows are **server-only**, but none currently holds a
-secret. Defaults are optional to enter; resource identifiers are required for
+are deployment-specific. API rows are **server-only**; database URLs containing
+credentials are secrets. Defaults are optional to enter; resource identifiers are required for
 trading on the corresponding chain, rather than for rendering the web shell.
 Preview and Production requirements below describe the intended functional app
-**after** resolving the hosted API/storage blocker. A Vercel Production deployment
+**after** setting up the PostgreSQL target and chain resources. A Vercel Production deployment
 does not imply a blockchain mainnet deployment; choose the intended networks
 explicitly, with testnets for the initial demo.
 
@@ -92,18 +91,20 @@ explicitly, with testnets for the initial demo.
 | `VITE_SUI_MARKETPLACE_OBJECT_ID` | web | Actual shared Market ID. | None | Same-network Market. | Same-network Market. | Public/deployment; required for Sui trading. |
 | `VITE_SUI_VEHICLE_OBJECT_ID` | web | Actual Vehicle ID. | None | Same-network Vehicle. | Same-network Vehicle. | Public/deployment; required for Sui trading. |
 | `VITE_SUI_PAYMENT_COIN_TYPE` | web | Optional; `<package ID>::musdc::MUSDC`. | None | Optional with that package's MUSDC. | Optional with that package's MUSDC. | Public/deployment; override only to match deployed payment type. |
-| `DATABASE_PATH` | api | Optional; `.local/auth.sqlite` relative to API working directory. Containers need persistent storage. | None | Omit; SQLite blocked. | Omit; SQLite blocked. | Server-only/local; not a hosted storage solution. |
+| `DATABASE_URL` | api | Required; local PostgreSQL URL. | Not read by tests. | Required; isolated Neon Preview pooled URL with TLS. | Required; separate Production pooled URL with TLS. | Server-only/secret; required for runtime, never `VITE_*`. |
+| `DATABASE_URL_UNPOOLED` | api tools | Optional direct URL for migration/import. | None | Operator/CI direct URL to Preview target. | Operator/CI direct URL to Production target. | Server-only/secret; optional override for tools, absent from runtime dashboard. |
+| `TEST_DATABASE_URL` | api tests | Required when running API tests; direct disposable-database URL. | Required; schemas created/migrated/dropped. | No runtime use. | No runtime use. | Server-only/secret/test-only; omit from Vercel. |
 | `FRONTEND_ORIGIN` | api | Optional; defaults to `http://localhost:5173`. | None | Exact HTTPS browser origin. | Exact HTTPS browser origin. | Server-only/deployment; required for deployed POSTs/cookies. |
 | `API_HOST` | api | Optional; `127.0.0.1`, or `0.0.0.0` in a container. | None | Omit. | Omit. | Server-only/local; preserve platform handling. |
 | `API_PORT` | api | Optional; defaults to `3001`. | None | Omit. | Omit. | Server-only/local; `PORT` takes precedence. |
 | `PORT` | api | Optional outside Vercel; overrides `API_PORT`. | None | Platform-managed. | Platform-managed. | Server-only/deployment; do not enter manually. |
-| `VERCEL` | api | Absent ordinarily; injected by `vercel dev`. | None | Platform-managed. | Platform-managed. | Server-only/deployment; used by storage guard. |
-| `VERCEL_ENV` | api | Absent ordinarily; `development` in `vercel dev`. | None | Platform `preview`. | Platform `production`. | Server-only/deployment; do not override guard. |
+| `VERCEL` | api | Absent ordinarily; injected by `vercel dev`. | None | Platform-managed. | Platform-managed. | Server-only/deployment; attaches database pool lifecycle handling. |
 
-The API and frontend execution tests supply controlled configuration, mocked
-fetch/chain reads and in-memory/temporary databases. They need none of these
-variables, real credentials or running blockchain nodes. Chain runtime tests
-have separate local tool/fixture prerequisites in [verification](verification.md).
+API tests use a real disposable PostgreSQL database supplied by
+`TEST_DATABASE_URL`; config tests inject their own settings. Frontend execution
+tests supply controlled configuration and mocked fetch/chain reads. Neither suite
+needs running blockchain nodes. Chain runtime tests have separate local tool/fixture
+prerequisites in [verification](verification.md).
 
 | Related setting | Actual scope |
 | --- | --- |
@@ -111,6 +112,8 @@ have separate local tool/fixture prerequisites in [verification](verification.md
 | `VITE_SOLANA_PROGRAM_ID` | Legacy seed output with **no reader**. Public but ineffective; omit from the dashboard. The actual program ID is compiled into the client/Rust/Anchor configuration. |
 | `import.meta.env.DEV` | Computed Vite flag used by the API URL fallback, not an environment variable to enter. |
 | `NODE_ENV` | Tool-managed; do not force `development` on hosted builds. Both Vercel scopes run `pnpm build` in Vite production mode; Preview does not mean a Vite dev server or an automatic `.env.preview` load. |
+| `VERCEL_ENV` | Platform metadata; no longer read by the API. Do not enter manually. |
+| `DATABASE_PATH` | Removed API setting. Omit in every environment; there is no SQLite fallback. |
 
 ### Loading and browser exposure
 
@@ -160,27 +163,30 @@ strategy in a separate task. Do not use wildcard Origin or disable validation.
 
 ### Dashboard inputs and functional-deployment blockers
 
-After the separate storage task, enter `FRONTEND_ORIGIN` for the actual browser
+Enter server-only `DATABASE_URL` and `FRONTEND_ORIGIN` for the actual browser
 origin in each [Vercel environment scope](https://vercel.com/docs/environment-variables).
 For EVM, enter the chain ID, public RPC and all three addresses; for Solana, the
 public RPC and both mints; for Sui testnet, all three IDs. Sui network/RPC can use
 the defaults and the coin type can derive from the package when that matches the
 deployment. Scope resource sets separately when Preview and Production use
-different deployments. No current dashboard secret is needed by the app, and
-adding a speculative `DATABASE_URL` would have no effect today.
+different deployments. Keep Preview identity storage isolated from Production,
+and apply migrations explicitly to each target using operator/CI credentials.
 
 Intentionally omit `VITE_API_URL`, `VITE_SOLANA_PROGRAM_ID`, `DATABASE_PATH`,
-`API_HOST`, `API_PORT`, manually supplied `PORT`/`VERCEL`/`VERCEL_ENV`, invented
-session/signing variables and all frontend secrets. Future database credentials
-must remain server-only and will be defined by the storage migration.
+`DATABASE_URL_UNPOOLED`, `TEST_DATABASE_URL`, `API_HOST`, `API_PORT`, manually
+supplied `PORT`/`VERCEL`/`VERCEL_ENV`, invented session/signing variables and all
+frontend secrets. Database administration/test URLs belong only in their specific
+operator or test environments.
 
 The current localhost API/RPC URLs, EVM `31337` and local contract addresses,
 local Solana mints/validator, and Sui placeholder/missing deployment IDs are
 not hosted resource configuration. In a deployed browser, localhost targets
 the visitor's machine. Before a functional deployment:
 
-1. Replace SQLite with durable shared identity storage and verify existing
-   identity/H2 invariants before removing the hosted-startup guard.
+1. Create the intended isolated Neon databases/branches, configure server-only
+   runtime URLs and run migrations. If retaining existing SQLite identities,
+   follow the explicit cutover procedure. Verify TLS, pooled transactions,
+   cross-instance auth and persistence on an isolated hosted target.
 2. Select and deploy the intended testnet resources in separate chain tasks.
    EVM needs compatible MockUSDC (6 decimals), VehicleNFT and Marketplace,
    vehicles matching the catalog's token IDs 1-3 and funded test wallets.
@@ -202,13 +208,17 @@ the visitor's machine. Before a functional deployment:
 
 ## Local checks and deployment steps
 
-The ordinary two-terminal `pnpm api:dev` / `pnpm dev` workflow is unchanged. No
-Dockerfile or Compose file exists in this checkout. Container-compatible host,
-port, API URL and database-volume overrides remain available; no Docker workflow
-is replaced.
+After [local PostgreSQL setup and migrations](postgres.md#local-postgresql-setup),
+the two-terminal `pnpm api:dev` / `pnpm dev` workflow uses exported `DATABASE_URL`.
+No Dockerfile or Compose file exists in this checkout. Container-compatible host,
+port and API URL overrides remain available; containers now need a PostgreSQL
+connection rather than an API-local SQLite volume.
 
 For the combined Vercel route table, use a fresh Command Prompt from the repository
 root, with a current Vercel CLI supporting Services:
+
+Export the local `DATABASE_URL` in that terminal first and migrate that database;
+the URL is server-only and must not be renamed with a Vite prefix.
 
 ```bat
 set "FRONTEND_ORIGIN=http://localhost:3000"
@@ -224,13 +234,13 @@ modules use `.pnpm-store`, select that same store before Vercel's dependency syn
 set "npm_config_store_dir=%CD%\.pnpm-store"
 ```
 
-`-L` avoids cloud authentication. Local Vercel development has
-`VERCEL_ENV=development`, permits local SQLite and injects service ports. It may
+`-L` avoids cloud authentication. Local Vercel development injects service ports
+and uses the explicitly configured local PostgreSQL connection. It may
 need to download Vercel runtime tools. Existing API environment files are not
 automatically loaded by the ordinary API scripts; see [environment loading](verification.md#environment-examples-and-loading).
 
-After the storage migration, confirm service names/public paths and configure
-the project/environment values before running these commands from the root:
+Service names/public paths were confirmed in the scaffolding task. Set up the
+database/schema and project/environment values before running these commands from the root:
 
 ```bat
 vercel link
@@ -238,19 +248,21 @@ vercel
 ```
 
 `vercel` creates a preview deployment. Production deployment is a separate,
-explicit action (`vercel --prod`); this task does not link, deploy or migrate.
+explicit action (`vercel --prod`). No Vercel deployment or Production database
+migration was performed here.
 
 After the first deployment, verify both service builds include workspace packages,
 API JSON/404 routing, SPA deep links and real JS/CSS asset responses, exact Origin
 rejection, HTTPS cookie login/session/logout and H2 proofs. Verify durable identity
-and challenge consumption across cold starts/concurrent instances once storage is
-implemented. Verify browser-wallet/network interaction separately; local tests and
+and challenge consumption across cold starts/concurrent instances.
+Verify browser-wallet/network interaction separately; local tests and
 application builds cannot establish these hosted/runtime results.
 
 ## Verification on 2026-10-07
 
 Windows, Node `24.19.0`, pnpm `10.26.0`. This table records the original
-scaffolding checks; the subsequent environment audit is recorded separately below.
+scaffolding checks **before the PostgreSQL migration**; the subsequent environment
+audit is recorded separately below. SQLite results are historical evidence.
 
 | Check | Result and scope |
 | --- | --- |
@@ -274,6 +286,10 @@ the absence of bindings were subsequently confirmed, and the scaffolding was
 committed/pushed. The current deployment prerequisites are listed above.
 
 ## Environment/configuration audit on 2026-10-07
+
+This records the audit before PostgreSQL; its reader counts and storage guard
+describe that earlier implementation. The current environment matrix above
+includes the migration's runtime/admin/test URLs.
 
 Inspected web/API environment readers, Vite configuration and loading, local
 configuration writers, auth/origin/cookie handling, service routing, examples,
