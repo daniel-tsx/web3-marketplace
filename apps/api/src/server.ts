@@ -41,6 +41,7 @@ async function verifyWalletSignature(ecosystem: Ecosystem, address: string, mess
 }
 
 export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://localhost:5173') {
+  const secureCookie = new URL(frontendOrigin).protocol === 'https:';
   const app = Fastify({ logger: false, bodyLimit: 16_384 });
   await app.register(cookie);
   await app.register(cors, { origin: frontendOrigin, credentials: true });
@@ -156,7 +157,7 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
       if (cause instanceof Error && cause.message === 'challenge_used') return reply.code(409).send(error('challenge_used', 'This challenge has already been used.'));
       throw cause;
     }
-    reply.setCookie(COOKIE, sessionToken, { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: SESSION_MS / 1000 });
+    reply.setCookie(COOKIE, sessionToken, { httpOnly: true, sameSite: 'lax', secure: secureCookie, path: '/', maxAge: SESSION_MS / 1000 });
     return { userId };
   });
 
@@ -230,7 +231,7 @@ export async function buildServer(db: DatabaseSync, frontendOrigin = 'http://loc
   app.post('/logout', async (request, reply) => {
     const token = request.cookies[COOKIE];
     if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(token));
-    reply.clearCookie(COOKIE, { path: '/' });
+    reply.clearCookie(COOKIE, { httpOnly: true, sameSite: 'lax', secure: secureCookie, path: '/' });
     return { ok: true };
   });
 

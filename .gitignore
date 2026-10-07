@@ -8,6 +8,7 @@ packages/contracts/broadcast/
 .env.*
 !.env.example
 .tools/
+.vercel/
 apps/api/.local/
 packages/solana/.local/
 packages/solana/target/

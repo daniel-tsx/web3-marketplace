@@ -38,7 +38,7 @@ means the check's tools are present here, not that the check has just passed.
 | Solidity compile + ABI export | `pnpm contracts:build` | Foundry/solc, OpenZeppelin and initialized forge-std submodule; regenerates [abis.ts](../../apps/web/src/contracts/abis.ts). | Available using local Foundry/PATH setup below. |
 | EVM tests | `pnpm contracts:test` | [Foundry suite](../../packages/contracts/test/VehicleMarketplace.t.sol), including H1; no Anvil or wallet needed. | Available using local Foundry/PATH setup. |
 | API tests | `pnpm api:test` | [Server tests](../../apps/api/src/server.test.ts), in-memory/temporary SQLite and cryptographic proofs/migration; no HTTP server or chain runtime needed. | Available. |
-| Frontend execution tests | `pnpm execution:test` | Resolver, Sui result/query/read helpers, purchase-error and [H3 reconciliation tests](../../apps/web/src/web3/reconciliation.test.ts) listed in [web scripts](../../apps/web/package.json); no browser/wallet needed. | Available; uses real query clients, controlled reads and a server-rendered EVM status. Does not test browser interaction or real wallet/RPC execution. |
+| Frontend execution tests | `pnpm execution:test` | Browser API URL configuration, resolver, Sui result/query/read helpers, purchase-error and [H3 reconciliation tests](../../apps/web/src/web3/reconciliation.test.ts) listed in [web scripts](../../apps/web/package.json); no browser/wallet needed. | Available; uses Vite-transformed API code, real query clients, controlled reads and a server-rendered EVM status. Does not test browser interaction or real wallet/RPC execution. |
 | TypeScript | `pnpm typecheck` | Recursive API/web/Solana/Sui typechecks; contracts package has no typecheck script. | Available; does not compile Rust or Move. |
 | Lint | `pnpm lint` | ESLint on `apps/web/src` only. | Available; not repository-wide lint. |
 | Frontend build | `pnpm build` | Web TypeScript then Vite production bundle. | Available; no API or chain deployment. |
@@ -90,8 +90,8 @@ the old `sh` blocks' trailing `#` annotations are explanatory, not cmd syntax.
 
 | Configuration | Actual reader/behavior |
 | --- | --- |
-| API `DATABASE_PATH`, `FRONTEND_ORIGIN`, `API_PORT` | [index.ts](../../apps/api/src/index.ts): defaults to package-local `.local/auth.sqlite`, `http://localhost:5173`, port 3001. `pnpm api:db` and `pnpm api:dev` initialize/migrate identity storage; they are setup mutations, not documentation checks. |
-| `VITE_API_URL` | [auth/api.ts](../../apps/web/src/auth/api.ts): defaults to `http://localhost:3001`; cookies require consistent frontend/API sites and the configured Origin. Keep Vite at 5173 locally and avoid mixing localhost/127.0.0.1 browser sites. |
+| API `DATABASE_PATH`, `FRONTEND_ORIGIN`, `API_PORT`, `API_HOST`, `PORT` | [config.ts](../../apps/api/src/config.ts) and [index.ts](../../apps/api/src/index.ts): defaults to package-local `.local/auth.sqlite`, `http://localhost:5173`, `127.0.0.1:3001`. Platform `PORT` takes precedence over `API_PORT`; containers can set `API_HOST=0.0.0.0`. `pnpm api:db` and `pnpm api:dev` initialize/migrate identity storage; they are setup mutations, not documentation checks. Hosted Vercel API startup is blocked until the [storage migration](vercel.md). |
+| `VITE_API_URL` | [auth/api.ts](../../apps/web/src/auth/api.ts): defaults to `http://localhost:3001` in Vite development and `/api` in production builds. Explicit URLs remain supported and trailing slashes are removed. Cookies require consistent frontend/API sites and the configured Origin. Keep Vite at 5173 locally and avoid mixing localhost/127.0.0.1 browser sites. See [Vercel communication](vercel.md#environment-and-communication) for combined development/deployment. |
 | `VITE_CHAIN_ID`, `VITE_RPC_URL`, EVM address variables | [config.ts](../../apps/web/src/contracts/config.ts) defaults to 31337 / `http://127.0.0.1:8545`; [addresses.ts](../../apps/web/src/contracts/addresses.ts) reads MockUSDC, VehicleNFT and Marketplace public addresses. Local deployment sync writes them to ignored `apps/web/.env.local`. |
 | `VITE_SOLANA_RPC_URL`, vehicle/payment mint variables | [bootstrap](../../apps/web/src/bootstrap.tsx) defaults RPC to `http://127.0.0.1:8899`; [App](../../apps/web/src/App.tsx) reads mint IDs. Program ID is compiled into [client.ts](../../packages/solana/src/client.ts), Rust and Anchor config; the seed-emitted `VITE_SOLANA_PROGRAM_ID` is unused. |
 | `SOLANA_RPC_URL` | Solana [seed](../../packages/solana/scripts/seed.ts) and [runtime tests](../../packages/solana/tests/vehicle-marketplace.test.ts): defaults to local validator. Fixture accounts must never be used on a public network. |
@@ -112,8 +112,9 @@ package ID unless explicitly configured. There is no effective Solana program-ID
 environment override. The local Solana scripts use `SOLANA_RPC_URL` if exported;
 their existing localhost default needs no separate example file.
 
-[apps/api/.env.example](../../apps/api/.env.example) lists the three optional
-server overrides. Startup and `api:db` already use the shown defaults; copying a
+[apps/api/.env.example](../../apps/api/.env.example) lists the optional
+server overrides and platform port/container host conventions. Startup and
+`api:db` already use the shown defaults; copying a
 file does not change them because the API has no dotenv loader. To load customized
 values explicitly with Node 24/tsx, enter the API directory first so the relative
 environment-file path resolves consistently, including through Windows launchers:

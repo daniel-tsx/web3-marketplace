@@ -43,8 +43,10 @@ Solana base58 comparisons remain case-sensitive, and Sui addresses are canonical
 
 The browser sends credentials with API requests; JavaScript does not store the
 session token. SQLite stores only its hash. The API checks the configured Origin
-on POSTs and uses an HttpOnly, SameSite=Lax cookie. Its existing `secure: false`
-setting is for local HTTP; an HTTPS deployment needs a separate reviewed change.
+on POSTs and uses an HttpOnly, SameSite=Lax cookie with Path `/` and no Domain.
+Cookies are Secure when the configured frontend origin uses HTTPS; local HTTP
+remains supported. [Vercel scaffolding](../operations/vercel.md) preserves these
+boundaries but blocks hosted API startup pending durable shared identity storage.
 The API's Run 2 → Run 3 migration preserves identity rows rather than deleting the database.
 
 ## Custody and purchase intent

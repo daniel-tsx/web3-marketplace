@@ -1,6 +1,6 @@
 import type { Ecosystem, LinkedWallet } from '../execution/resolveExecution';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_URL = (import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3001' : '/api')).replace(/\/+$/, '');
 
 export interface Session { userId: string; wallets: LinkedWallet[]; }
 export interface Challenge { challengeId: string; message: string; expiresAt: string; }

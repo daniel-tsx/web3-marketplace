@@ -91,6 +91,8 @@ Open `http://localhost:5173`. This starts the frontend and identity service; tra
 
 Public browser configuration is described in [apps/web/.env.example](apps/web/.env.example); copy it to `apps/web/.env.local` when configuring chains. [apps/api/.env.example](apps/api/.env.example) describes optional server overrides; the API uses defaults unless variables are exported or explicitly loaded. See [setup and environment loading](docs/operations/verification.md#local-setup-boundaries) for submodules, Foundry, and full chain setup.
 
+[Vercel Services deployment scaffolding](docs/operations/vercel.md) adds one project with a public `/api` Fastify service and a Vite web service. Hosted API startup is intentionally blocked until SQLite identity storage is replaced with durable shared storage; local development remains available.
+
 ## AI-assisted engineering workflow
 
 Codex, Claude Code, and Cursor share a human-reviewed engineering workflow. Project memory lives in source control: [AGENTS.md](AGENTS.md) defines behavior, [AGENT_START_HERE](docs/AGENT_START_HERE.md) routes context, and task-specific documents retain decisions and verification evidence. Chat history is working context rather than the project's source of truth. [AI_WORKFLOW.md](docs/AI_WORKFLOW.md) describes inspection, scoped implementation, review, and verification.

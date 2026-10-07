@@ -34,6 +34,7 @@ test('EVM login, exact challenge, replay and expiry', async () => {
     assert.equal(good.statusCode, 200);
     const cookie = good.headers['set-cookie'] as string;
     assert.match(cookie, /HttpOnly/);
+    assert.doesNotMatch(cookie, /; Secure/);
     const me = await app.inject({ method: 'GET', url: '/me', headers: { cookie } });
     assert.equal(me.json().wallets[0].address, evmA.address.toLowerCase());
     const replay = await post('/auth/verify', { challengeId: issued.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: issued.message }) });
@@ -44,6 +45,33 @@ test('EVM login, exact challenge, replay and expiry', async () => {
     assert.equal(expiredResponse.json().error.code, 'challenge_expired');
     const logout = await app.inject({ method: 'POST', url: '/logout', headers: { origin: ORIGIN, cookie } });
     assert.equal(logout.statusCode, 200);
+    assert.equal((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode, 401);
+  } finally { await app.close(); }
+});
+
+test('HTTPS origin uses secure cookies and rejects other origins', async () => {
+  const origin = 'https://marketplace.example';
+  const app = await buildServer(openDatabase(':memory:'), origin);
+  const post = (url: string, payload: object) => app.inject({ method: 'POST', url, headers: { origin }, payload });
+  try {
+    const forbidden = await app.inject({ method: 'POST', url: '/auth/challenge', headers: { origin: ORIGIN }, payload: { ecosystem: 'evm', address: evmA.address } });
+    assert.equal(forbidden.statusCode, 403);
+    assert.equal(forbidden.json().error.code, 'invalid_origin');
+    const issued = (await post('/auth/challenge', { ecosystem: 'evm', address: evmA.address })).json();
+    assert.ok(issued.message.includes(`Origin: ${origin}`));
+    const verified = await post('/auth/verify', { challengeId: issued.challengeId, ecosystem: 'evm', address: evmA.address, signature: await evmA.signMessage({ message: issued.message }) });
+    assert.equal(verified.statusCode, 200);
+    const cookie = verified.headers['set-cookie'] as string;
+    assert.match(cookie, /; Secure/);
+    assert.match(cookie, /; HttpOnly/);
+    assert.match(cookie, /; SameSite=Lax/);
+    assert.match(cookie, /; Path=\//);
+    assert.equal(verified.headers['access-control-allow-origin'], origin);
+    assert.equal(verified.headers['access-control-allow-credentials'], 'true');
+    assert.equal(verified.headers['cache-control'], 'no-store');
+    assert.equal((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode, 200);
+    const loggedOut = await app.inject({ method: 'POST', url: '/logout', headers: { origin, cookie } });
+    assert.match(loggedOut.headers['set-cookie'] as string, /; Secure/);
     assert.equal((await app.inject({ method: 'GET', url: '/me', headers: { cookie } })).statusCode, 401);
   } finally { await app.close(); }
 });

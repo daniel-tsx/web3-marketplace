@@ -3,12 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "build": "tsc --noEmit && vite build",
-    "test": "tsx --test src/execution/resolveExecution.test.ts src/web3/sui/suiFlow.test.ts src/web3/purchaseIntent.test.ts src/web3/reconciliation.test.ts"
+    "test": "tsx --test src/auth/api.test.ts src/execution/resolveExecution.test.ts src/web3/sui/suiFlow.test.ts src/web3/purchaseIntent.test.ts src/web3/reconciliation.test.ts"
   },
   "dependencies": {
     "@mysten/dapp-kit-react": "^1.0.0",
