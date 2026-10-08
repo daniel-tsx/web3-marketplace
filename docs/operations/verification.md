@@ -304,6 +304,62 @@ cloud package, `/api/me`, assets and HTTPS/SQL-backed auth verification in the
   deployment/transaction logic are unchanged. Remote `main` matched local
   `83b134f` before committing; no history rewrite is needed.
 
+### Dependency import follow-up on 2026-10-08
+
+Status: **local correction verified; hosted correction unverified**. This follows
+the new exception from exact Production commit `ce4e27f`, deployment
+`dpl_2CQEgJ9vNJbb9XXTCBj8mSNFGeQe`. The
+[current diagnosis and verification procedure](vercel.md#production-dependency-loading-failure-after-ce4e27f)
+own the dependency correction. Native Fastify/Services configuration is unchanged.
+
+| Command/check | Result and scope |
+| --- | --- |
+| `node .tools/api-runtime/followup.mjs deployment`, `logs`, `build` | **passed**, exact SHA/alias, Node 24, source entrypoint and sanitized `ERR_REQUIRE_ESM` stack. Exception is rpc-websockets 9.3.9 requiring UUID 14, unlike the former root handler syntax error. No env/settings mutation. |
+| `node .tools/api-runtime/followup.mjs files` | **failed**, deployment file-tree API returned 404. The cloud function archive was not retrieved; local artifact inspection is explicitly separate. |
+| Plain Node reproduction / `pnpm exec tsx --test src/config.test.ts` | **failed before correction** on the exact UUID/rpc-websockets module path, then **passed**, all eight config tests. Retained regression's child uses no `tsx` and disables synchronous require(ESM)/module detection. Initial child using tsx masked the failure and was replaced. |
+| `pnpm install --lockfile-only --ignore-scripts --prefer-offline --store-dir .pnpm-store`; `pnpm install --frozen-lockfile --ignore-scripts --prefer-offline --store-dir .pnpm-store` | **passed**, targeted Solana SDK rpc-websockets 9.3.8/UUID 11.1.1 resolution, frozen install. Existing deprecated-wallet-package/peer warnings remain. 9.3.10 deprecation was checked in registry metadata; that candidate is not retained. |
+| `pnpm api:test` via dedicated localhost runner | **passed**, all 51 API/auth/database tests, including new loader regression, real wallet proofs, H2, origins/cookies, replay, persistence, expiry and races. Local PostgreSQL only. |
+| `pnpm execution:test`; `pnpm typecheck`; `pnpm lint`; API/web builds | **passed**, 37 frontend tests, recursive TypeScript, frontend ESLint, `pnpm --dir apps/api build` and `pnpm build`. Existing Vite annotation/large-chunk warnings remain. No API lint script exists. |
+| `node .tools/api-runtime/bootstrap-repro.mjs` | **passed**, plain compiled API startup with synchronous require(ESM) and module detection disabled, production origin configuration and pool-attachment call, real HTTP `/me` JSON 401/no-store and unknown route JSON 404. No-cookie requests perform no SQL; not a cloud launcher/lifecycle test. |
+| Native builder `build.mjs followup`; `artifact-metadata.mjs` | **passed**, actual local builder emits source ESM `.mjs` in workspace module scope; artifact contains rpc-websockets 9.3.8 and UUID 11.1.1's CommonJS export/package scope. No build/output overrides changed. |
+| `node .tools/api-runtime/load.mjs followup` | **failed**, isolated Windows materialization cannot resolve scoped `@noble/hashes`, the previously observed tracing limitation. Complete Linux/cloud package remains **unverified**. |
+| Local-only Services / `node .tools/api-runtime/http-smoke.mjs` | **passed**, prefix/query and JSON 401/404, foreign/missing Origin rejection, signed EVM login/session/replay/logout, deep links and actual web scripts. Task-only localhost schema, no hosted writes. |
+| `node .tools/hosted-smoke/audit.mjs` | **passed**, native Services schema/entrypoint, SPA asset exclusions, 191 actual upload candidates and 89 browser outputs; private configured database signatures absent. Scoped leak check, not exhaustive. |
+| `node .tools/api-runtime/followup-probe.mjs` | **failed** canonical Production API health as expected for unchanged ce4e27f: both API paths 500 with invocation-error header; UI HTML **passed** 200. Immutable URL returns platform-style 401/code `401`, not API `unauthenticated`; does not prove runtime health. Fresh log rows initially had status 0/empty message; exact-deployment earlier exception rows remain the diagnostic evidence. |
+| Scope/secrets/docs/diff | **passed**, five tracked files: root override, lockfile, config regression and two owning docs. No runtime API/UI/branding/blockchain source changes or private env/credentials. Local documentation links/anchors and `git diff --check` passed. Pre-existing portfolio artifacts preserved and excluded. |
+| Corrected hosted runtime, protected immutable target, browser signing and Neon lifecycle | **not run**; no commit, push or redeployment authorized for this follow-up. No Neon writes or migrations. |
+
+Task-only scripts/artifacts stay ignored. Local smoke schema, Services process and
+the test-started PostgreSQL cluster were cleaned up, with cluster files preserved.
+
+### Dependency correction finalization on 2026-10-08
+
+Status: **local final validation passed; hosted verification pending**. The user
+authorized the five-file dependency correction to be committed and pushed to
+`origin/main`. Deployment is owned by the existing Vercel Git integration; no
+manual deployment, hosted migration or application configuration change is part
+of finalization. The original cloud artifact limitations above remain open.
+
+Validation used a fresh ignored snapshot of the 139 tracked regular files,
+including the current fix, with no pre-existing `node_modules`, local env files
+or generated outputs. The forge-std gitlink is unnecessary for these Node checks.
+Node `24.19.0` and pnpm `10.26.0` were retained. PostgreSQL was the dedicated
+localhost test cluster, never Neon. Commands below ran from that fresh snapshot
+unless a repository-only review is stated.
+
+| Command/check | Result and scope |
+| --- | --- |
+| `pnpm install --frozen-lockfile --store-dir ../../../.pnpm-store` | **passed**, clean install of all six workspace projects using the existing repository package store. No lockfile change. pnpm's existing default policy skipped unapproved dependency build scripts; Solana offline tests use the pure JS bigint fallback. An initial command with a quoted absolute store path failed Windows argument parsing and was corrected to this relative path. |
+| Lockfile and installed dependency review | **passed**, direct-parent scoped `@solana/web3.js>rpc-websockets` override; both SDK snapshots use rpc-websockets `9.3.8`, resolving UUID `11.1.1`'s CommonJS export. No remaining RPC `9.3.9` or UUID `14.0.2` lock entry. SDK remains `1.99.0`. |
+| `pnpm --dir apps/api exec tsx --test src/config.test.ts` | **passed**, 8 tests; regression launches plain Node with synchronous require(ESM) and module detection disabled. |
+| `pnpm api:test` with dedicated local `TEST_DATABASE_URL` | **passed**, all 51 tests, zero skipped; real SQL, cryptographic proofs, session/H2/Origin/replay/concurrency coverage. |
+| `pnpm execution:test`; `pnpm --dir packages/solana test` | **passed**, 37 frontend execution tests and 3 Solana offline tests. No chain deployment or transaction execution. |
+| `pnpm typecheck`; `pnpm lint`; `pnpm --dir apps/api build`; `pnpm build` | **passed**, recursive TypeScript, frontend lint and both builds. Existing Vite annotation/large-chunk warnings remain. |
+| Plain compiled API startup / localhost HTTP | **passed**, fresh compiled API with both module-loader restrictions, `/me` JSON 401/unauthenticated/no-store and unknown route JSON 404 even with HTML Accept. No database query for guest probes. |
+| `pnpm audit --json`, previous and corrected lockfiles | Overall audit **failed** on the same 12 existing findings (1 critical, 4 high, 7 moderate); exact advisory/version/path comparison **passed** with zero introduced findings and none reported for pinned RPC/UUID versions. See [the advisory review](vercel.md#final-dependency-and-advisory-review). Existing findings need a separate reachability/remediation review. |
+| Scope, secrets, docs and whitespace review | **passed**, only root manifest/lockfile, loader regression and two owning docs changed; private env/credentials/generated outputs excluded. Services, Fastify bootstrap/routes, persistence, auth, UI/branding and blockchain source preserved. Existing untracked portfolio artifacts remain excluded. |
+| Git-integrated hosted runtime / real hosted wallet/Neon flow | **not run** during local finalization; follow [the hosted procedure](vercel.md#verification-before-another-deployment) after the pushed commit's deployment becomes Ready. Local startup does not establish hosted recovery. |
+
 ## Choosing checks
 
 For a code change, select the affected matrix rows and regression coverage; do not

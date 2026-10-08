@@ -1,8 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readServerConfig, readDatabaseUrl, readFrontendOrigin } from './config.js';
 
 const DATABASE_URL = 'postgresql://vehicle:example@localhost:5432/vehicle_test';
+
+test('API Solana dependency loads without synchronous CommonJS loading of ESM', () => {
+  const script = `
+    import assert from 'node:assert/strict';
+    import { createRequire } from 'node:module';
+    const require = createRequire(import.meta.url);
+    const { PublicKey } = require('@solana/web3.js');
+    const address = new PublicKey(new Uint8Array(32)).toBase58();
+    assert.equal(new PublicKey(address).toBytes().length, 32);
+  `;
+  execFileSync(process.execPath, ['--no-experimental-require-module', '--no-experimental-detect-module', '--input-type=module', '--eval', script], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)), timeout: 15_000, stdio: 'pipe', windowsHide: true,
+  });
+});
 
 test('PostgreSQL is mandatory; local origin and listener defaults remain unchanged', () => {
   assert.deepEqual(readServerConfig({ DATABASE_URL }), {

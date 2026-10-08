@@ -2,10 +2,12 @@
 
 Status: **current**. This owns the additional Vercel deployment target. The
 API uses PostgreSQL for durable identity storage. Native Services routing and
-hosted-origin policies pass local checks. The hosted API currently fails during
-ESM loading; the [packaging correction below](#hosted-api-module-loading-failure-on-2026-10-08)
-is prepared locally and awaits a new deployment. HTTPS browser authentication
-and hosted database lifecycle remain unverified.
+hosted-origin policies pass local checks. Production `ce4e27f` includes the earlier
+entrypoint packaging correction, but now fails on a different dependency import:
+[CommonJS rpc-websockets requires ESM-only UUID](#production-dependency-loading-failure-after-ce4e27f).
+The dependency correction is finalized locally for the existing Git integration.
+HTTPS browser authentication and
+hosted database lifecycle remain unverified.
 This smoke target covers the web shell and authentication; blockchain trading
 requires separate deployments and is outside this run.
 
@@ -442,7 +444,9 @@ deployment; the working tree is left for review.
 
 ## Hosted API module-loading failure on 2026-10-08
 
-Status: **prepared**, with the production fix **unverified**. The UI revamp was
+Status: **historical diagnosis**; the correction shipped in `ce4e27f`. The next
+[runtime exception](#production-dependency-loading-failure-after-ce4e27f) is different.
+The UI revamp was
 committed/pushed before this investigation. The active Production alias
 `web3-marketplace-phi.vercel.app` resolves to deployment
 `dpl_GrQUiet5cqPovmCyKSCMkHrvPHdg`, built from
@@ -573,3 +577,159 @@ or blockchain change. The subsequent authorized pre-push review approved the
 four-file change; [its fresh checks and exclusions](verification.md#pre-push-review-on-2026-10-08)
 are recorded separately. Frontend source/branding and production auth logic remain
 unchanged. Hosted health still requires the new deployment's runtime checks.
+
+## Production dependency-loading failure after ce4e27f
+
+Status: **current diagnosis; correction finalized; hosted verification pending**. Read-only CLI
+inspection confirms Production deployment `dpl_2CQEgJ9vNJbb9XXTCBj8mSNFGeQe`,
+`web3-marketplace-3p6l6b9h4-daniel-tsx.vercel.app`, at exact commit
+`ce4e27f3f27799a4f5e757d9470895631e422798`. Its canonical alias remains
+`https://web3-marketplace-phi.vercel.app`.
+
+### Exact exception and changed failure boundary
+
+The exception for `/api/me` at **2026-10-08 03:38:10.413 UTC**, and
+`/api/runtime-probe` at **03:38:17.956 UTC**, is:
+
+```text
+Error [ERR_REQUIRE_ESM]: require() of ES Module
+/var/task/node_modules/.pnpm/uuid@14.0.2/node_modules/uuid/dist-node/index.js
+from /var/task/node_modules/.pnpm/rpc-websockets@9.3.9/node_modules/rpc-websockets/dist/index.cjs not supported.
+    at /opt/rust/nodejs.js:2:14648
+    at Module.Ro (/opt/rust/nodejs.js:2:15026)
+    at e.<computed>.ft._load (/opt/rust/nodejs.js:2:14618)
+    at a (/opt/rust/bytecode.js:2:1127)
+```
+
+This is **not** the earlier `/var/task/index.js` syntax error. The API imports
+`PublicKey` from `@solana/web3.js@1.99.0`; its Node/CommonJS entrypoint requires
+`rpc-websockets@9.3.9`, whose CommonJS build unconditionally calls `require('uuid')`.
+The lockfile resolves that dependency to UUID `14.0.2`, whose package is ESM-only.
+The Vercel CommonJS loader shown in the stack rejects it before application
+initialization, configuration/pool creation, routes or SQL. Neon is not implicated
+by this exception.
+
+Default local Node 24 can synchronously require eligible ESM modules, and `tsx`
+can transform dependencies. Those checks masked the incompatibility. A plain Node
+child with `--no-experimental-require-module` reproduces the same exception and
+module paths. This reproduces the relevant loader capability; it does not emulate
+all of Vercel's Rust launcher.
+
+### Packaging/configuration evidence
+
+The exact deployment metadata retains API root `apps/api`, Fastify,
+`entrypoint: src/index.ts`, `buildCommand: pnpm build`, `outputDirectory: .`,
+Node 24, the API path transforms and the separate Vite output/SPA rules. Its
+build log reports native `@vercel/backends` and
+`Build complete — Using src/index.ts as the root entrypoint.` Cloud CLI is 62.1.0;
+the backend builder version is not exposed.
+
+The official [Fastify documentation](https://vercel.com/docs/frameworks/backend/fastify)
+supports this source listener pattern, and the
+[Services reference](https://vercel.com/docs/services/config-reference) supports
+service-scoped build/output settings. The inspected native builder's `.` setting
+prevents reuse/flattening of `dist`. The new exception is independently reproduced
+without that builder; changing these settings does not repair the dependency's
+CommonJS import. Both overrides, the entrypoint and all routing remain unchanged.
+
+The deployment file-tree endpoint returned **404**, so the cloud function archive
+was not downloaded or inspected. A fresh actual local native build (CLI 62.7.0 /
+backend 17.0.0) emits `apps/api/src/index.mjs`, with ESM format and API
+`package.json` type `module`. Its corrected dependencies include CommonJS
+`rpc-websockets@9.3.8`, UUID `11.1.1`'s `./dist/cjs/index.js` require export and its
+nested `type: commonjs` package. These are local artifact findings, not a claim
+about the inaccessible cloud archive. Isolated Windows artifact loading still
+fails on an omitted scoped `@noble/hashes` alias; the complete cloud package remains
+unverified.
+
+### Minimal dependency correction
+
+The root [package.json](../../package.json) adds one scoped pnpm override:
+`"@solana/web3.js>rpc-websockets": "9.3.8"`. The regenerated
+[lockfile](../../pnpm-lock.yaml) changes only that package `9.3.9 → 9.3.8` and its
+UUID `14.0.2 → 11.1.1` dependency, plus the override. It remains within the Solana
+SDK's declared `^9.0.2` range. The
+[published 9.3.8 manifest](https://raw.githubusercontent.com/elpheria/rpc-websockets/v9.3.8/package.json)
+declares UUID `^11.0.0`; UUID 11 supports both CommonJS and ESM, whereas
+[UUID 12 onward removes CommonJS support](https://github.com/uuidjs/uuid/blob/main/README.md).
+Registry metadata marks 9.3.10 deprecated; it was considered but is not retained.
+There is no SDK/major-version upgrade or handwritten dependency patch.
+
+[config.test.ts](../../apps/api/src/config.test.ts) adds the regression: a plain
+Node child, without `tsx`, imports the exact API Solana CommonJS dependency while
+disabling synchronous `require(ESM)` and automatic module detection. It failed on
+9.3.9/UUID 14 before the correction and passes on 9.3.8/UUID 11. The first attempted
+`tsx` child masked the error and was corrected before retaining the regression.
+API authentication, persistence, bootstrap, UI/branding, transaction and blockchain
+deployment sources are unchanged. No private environment value or credential was
+printed, tracked or moved to the browser.
+
+### Final dependency and advisory review
+
+The override matches only the direct `@solana/web3.js > rpc-websockets` edge;
+there is no global rpc-websockets or UUID override. Both SDK peer-dependency
+snapshots resolve rpc-websockets `9.3.8`, whose snapshot resolves UUID `11.1.1`.
+A fresh tracked-file snapshot, with no existing `node_modules`, private env files
+or generated output, installed using pnpm `10.26.0` and `--frozen-lockfile`.
+The lockfile remained byte-for-byte unchanged. Installed API resolution reaches
+UUID's CommonJS export. The Services configuration is unchanged.
+
+On **2026-10-08**, `pnpm audit --json` was run against the exact previous
+commit's lockfile and the corrected lockfile. Advisory IDs, vulnerable versions
+and dependency paths are identical: **zero introduced findings**, and no reported
+finding for rpc-websockets `9.3.8` or UUID `11.1.1`. UUID `11.1.1` is the patched
+version for [GHSA-w5hq-g745-h8pq](https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq).
+
+The overall audit still **fails** with **12 pre-existing findings: one critical,
+four high and seven moderate**. These are unresolved and were not changed by
+this runtime fix:
+
+| Dependency/version | Severity | Advisory and existing chain |
+| --- | --- | --- |
+| shell-quote `1.10.0` | Critical | [GHSA-pqg4-j6r4-53mv](https://github.com/advisories/GHSA-pqg4-j6r4-53mv), React Native/react-devtools-core beneath the web wallet adapter. |
+| bigint-buffer `1.1.5` | High | [GHSA-3gc7-fjrx-p6mg](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg), web SPL Token/buffer-layout-utils. |
+| ws `8.18.0` | High and moderate | [GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p), [GHSA-58qx-3vcg-4xpx](https://github.com/advisories/GHSA-58qx-3vcg-4xpx), older Viem beneath WalletConnect. |
+| braces `3.0.3` | High | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), React Native/Metro/micromatch. |
+| source-map-js `1.2.1` | High | [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q), web Vite/PostCSS. |
+| uuid `8.3.2` and `9.0.1` | Moderate, two findings | [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq), SDK/Jayson and Gemini/MetaMask respectively; neither is the corrected RPC dependency. |
+| decode-uri-component `0.2.2` | Moderate | [GHSA-vcc3-ghjq-m6fr](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr), WalletConnect/query-string. |
+| stream-json `1.9.1` | Moderate, three findings | [GHSA-528h-pc64-c93x](https://github.com/advisories/GHSA-528h-pc64-c93x), [GHSA-hqr4-qq8f-hg3x](https://github.com/advisories/GHSA-hqr4-qq8f-hg3x), [GHSA-mjw6-4jj6-33hc](https://github.com/advisories/GHSA-mjw6-4jj6-33hc), SDK/Jayson. |
+
+This comparison is a dependency advisory check, not a reachability assessment or
+a claim that the workspace is vulnerability-free. Separate security maintenance
+should assess these existing paths and compatible fixes, especially the critical
+finding. No unrelated dependency upgrade was bundled into the runtime correction.
+
+### Verification before another deployment
+
+See the [fresh verification record](verification.md#dependency-import-follow-up-on-2026-10-08)
+for passed/failed/unverified scopes. Plain compiled API startup now passes with
+the same loader restriction, production origin policy/pool attachment and JSON
+401/404; SQL-backed authentication tests use dedicated localhost PostgreSQL.
+No hosted schema/data writes, migration or dashboard change were performed.
+The original investigation did not commit, push or redeploy. The finalization
+request authorizes committing and pushing this correction to `origin/main`;
+the existing Vercel Git integration handles deployment, with no manual deploy.
+
+Read-only canonical probes still return HTTP 500 with `FUNCTION_INVOCATION_FAILED`
+for both paths, while the new UI HTML loads. The immutable deployment URL returns
+a platform JSON 401 with `error.code = "401"` and no marketplace UI; it is not the
+API's `unauthenticated` response and must not be counted as API health.
+
+After the Git-triggered deployment reaches Ready, confirm its exact pushed commit
+and locked rpc-websockets/UUID versions in the build. Then use the
+canonical alias (or an authenticated/bypassed protected test target):
+
+```bat
+curl.exe -i -H "Accept: application/json" https://web3-marketplace-phi.vercel.app/api/me
+curl.exe -i -H "Accept: text/html" https://web3-marketplace-phi.vercel.app/api/runtime-probe
+```
+
+Expect API JSON **401**, `error.code = unauthenticated`, `Cache-Control: no-store`,
+and API JSON **404**, respectively, without `x-vercel-error`. Check that runtime
+logs contain neither the former entrypoint syntax error nor UUID `ERR_REQUIRE_ESM`
+or missing-package errors. Repeat after idle; verify homepage/deep links/assets
+and wallet controls. On the intended isolated hosted auth target, perform real
+signed login, persistent `/api/me` **200**, replay/Origin rejection and logout
+followed by **401**, preserving Secure/HttpOnly/SameSite cookies. That SQL-backed
+flow, unlike an unauthenticated probe, verifies the hosted Neon connection.

@@ -2,7 +2,7 @@
   "name": "multichain-vehicle-marketplace",
   "private": true,
   "packageManager": "pnpm@10.26.0",
-  "pnpm": { "overrides": { "zod": "4.5.0" } },
+  "pnpm": { "overrides": { "zod": "4.5.0", "@solana/web3.js>rpc-websockets": "9.3.8" } },
   "scripts": {
     "anvil": "anvil --chain-id 31337",
     "contracts:build": "pnpm --dir packages/contracts build",
