@@ -7,21 +7,7 @@
       "entrypoint": "src/index.ts",
       "buildCommand": "pnpm build",
       "outputDirectory": ".",
-      "devCommand": "pnpm exec tsx src/index.ts",
-      "routes": [
-        {
-          "src": "/api/(.*)",
-          "transforms": [
-            { "type": "request.path", "op": "set", "args": "/$1" }
-          ]
-        },
-        {
-          "src": "/api",
-          "transforms": [
-            { "type": "request.path", "op": "set", "args": "/" }
-          ]
-        }
-      ]
+      "devCommand": "pnpm exec tsx src/index.ts"
     },
     "web": {
       "root": "apps/web",

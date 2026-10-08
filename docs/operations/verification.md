@@ -334,7 +334,9 @@ the test-started PostgreSQL cluster were cleaned up, with cluster files preserve
 
 ### Dependency correction finalization on 2026-10-08
 
-Status: **local final validation passed; hosted verification pending**. The user
+Status: **local final validation passed; hosted module loading verified**.
+The separate [routing correction below](#hosted-routing-correction-on-2026-10-08)
+has hosted verification pending. The user
 authorized the five-file dependency correction to be committed and pushed to
 `origin/main`. Deployment is owned by the existing Vercel Git integration; no
 manual deployment, hosted migration or application configuration change is part
@@ -358,7 +360,51 @@ unless a repository-only review is stated.
 | Plain compiled API startup / localhost HTTP | **passed**, fresh compiled API with both module-loader restrictions, `/me` JSON 401/unauthenticated/no-store and unknown route JSON 404 even with HTML Accept. No database query for guest probes. |
 | `pnpm audit --json`, previous and corrected lockfiles | Overall audit **failed** on the same 12 existing findings (1 critical, 4 high, 7 moderate); exact advisory/version/path comparison **passed** with zero introduced findings and none reported for pinned RPC/UUID versions. See [the advisory review](vercel.md#final-dependency-and-advisory-review). Existing findings need a separate reachability/remediation review. |
 | Scope, secrets, docs and whitespace review | **passed**, only root manifest/lockfile, loader regression and two owning docs changed; private env/credentials/generated outputs excluded. Services, Fastify bootstrap/routes, persistence, auth, UI/branding and blockchain source preserved. Existing untracked portfolio artifacts remain excluded. |
-| Git-integrated hosted runtime / real hosted wallet/Neon flow | **not run** during local finalization; follow [the hosted procedure](vercel.md#verification-before-another-deployment) after the pushed commit's deployment becomes Ready. Local startup does not establish hosted recovery. |
+| Git-integrated hosted runtime / real hosted wallet/Neon flow | **not run** during that finalization. The later routing investigation confirmed hosted module initialization from Fastify JSON, while `/api/me` still returned 404; signed hosted wallet/Neon flow remains unverified. |
+
+### Hosted routing correction on 2026-10-08
+
+Status: **historical implementation checks; hosted correction unverified**. No
+commit, push or deployment was performed during that investigation. The
+[mount-prefix diagnosis](vercel.md#hosted-api-mount-prefix-mismatch-after-1b7e299)
+owns the change and hosted checklist. The only runtime change is Fastify's
+Vercel-specific pre-routing mount normalization; service transforms are removed.
+
+| Command/check | Result and scope |
+| --- | --- |
+| Read-only CLI metadata / canonical GET probes | **passed**, exact Ready Production `1b7e299112f86008d3854f5aed352326fbeb64da`, `dpl_AizNhuosDh6d7cERtNJ2MvNLcBKx`. Metadata retains transforms, but Fastify observes original `/api/me?probe=mount` and returns JSON 404 without invocation-error headers. No hosted POST, SQL write or setting change. |
+| Native Fastify original-path regressions before correction | **failed as expected**, 2 new cases: GET 404 versus expected 401; POST challenge 404 versus expected 400. Remaining 52 tests, including ordinary local routing, passed. No Services transform emulator precedes these requests. |
+| `pnpm api:test` with dedicated localhost `TEST_DATABASE_URL` | **passed after correction**, all 54 tests, no skips. GET/POST, encoded/repeated queries, exact mount boundaries, `/api` root, unknown routes, CORS preflight, strict Origin checks, signed login/session/replay/logout, secure cookies, H2 and SQL/concurrency tests. |
+| `pnpm execution:test`; `pnpm typecheck`; `pnpm lint` | **passed**, 37 frontend tests including same-origin `/api` and credentials, recursive TypeScript and frontend ESLint. |
+| `pnpm --dir apps/api build`; `pnpm build` | **passed**, API compilation and production web build; existing Vite annotation/large-chunk warnings remain. No chain deployment/build was needed. |
+| `node .tools/api-runtime/routing-bootstrap.mjs` | **passed**, unchanged compiled entrypoint with actual Vercel Production environment, original HTTP paths and no Services preprocessor; GET/POST/query/root/unknown routes, normal 400/401/403 validation and ordinary local unprefixed routes. Both existing module-loader restrictions remain enabled. First attempt timed out on readiness; diagnostic rerun passed without an application change. Guest probes issue no SQL. This is not a hosted launcher test. |
+| Local native Services / `routing-services-smoke.mjs` | API flow **passed**, original `/api` GET/POST/query, roots/unknown JSON 404, real signed localhost login/session/replay/logout and exact Origin rejection. Uses one task-owned local schema, never Neon. First built-asset phase **failed** because the CLI still launched Vite development despite an alternate-config preview command. |
+| `node .tools/hosted-smoke/static-assets.mjs` through native Services and Vite preview | **passed**, all 89 production output files byte-for-byte, JS/CSS MIME types, SPA deep links, non-API namespace and `/api` separation. CLI debug showed it resolves service settings from the Git root; the local web devCommand was temporarily switched to preview, then restored byte-for-byte. No final web config/source change. |
+| `node .tools/hosted-smoke/audit.mjs` | **passed**, native schema/entrypoint, SPA exclusions, 191 SDK upload candidates and 89 browser outputs; private env/tooling/fixtures/artifacts and configured database credentials excluded. |
+| Scope/secrets/docs/diff review | **passed**, only server factory, server regressions, API transform removal and the two owning docs changed. Native entrypoint/build/output configuration, auth handlers/security hooks, cookies, persistence, dependency pins/lockfile, frontend/UI/branding and blockchain source preserved. No credentials/private env/generated artifacts included; portfolio artifacts remain untracked. Documentation links and `git diff --check` passed. |
+| Corrected hosted routing, browser-wallet signing and hosted Neon lifecycle | **not run**, no deployment authorized. After review, verify GET `/api/me` JSON 401, unknown/root JSON 404 and trusted-Origin POST `/api/auth/challenge` with `{}` JSON 400/invalid_wallet; missing/foreign Origin must remain JSON 403. |
+
+Task-started Services processes and PostgreSQL were stopped; the task-only local
+smoke schema was dropped. Test scripts, snapshots and build outputs stay ignored.
+
+### Routing correction final review on 2026-10-08
+
+Status: **fresh final local validation passed; hosted verification pending**.
+The final review authorizes the five-file correction to be committed as
+`fix: handle Vercel API prefix in Fastify routing` and pushed to `origin/main`.
+The existing Git integration handles deployment; no manual deployment is part
+of this review. The commands below ran again against the current working tree;
+the earlier native Services asset smoke remains historical evidence.
+
+| Command/check | Result and scope |
+| --- | --- |
+| `pnpm api:test` with dedicated localhost `TEST_DATABASE_URL` | **passed**, all 54 tests, no skips; includes dependency loading, original hosted GET/POST/query/edge paths, ordinary local routes and existing SQL/auth/session/wallet regressions. |
+| `pnpm execution:test` | **passed**, all 37 frontend tests, including production same-origin `/api` requests with credentials. |
+| `pnpm typecheck`; `pnpm lint` | **passed**, recursive TypeScript checks and frontend ESLint. |
+| `pnpm --dir apps/api build`; `pnpm build` | **passed**, fresh API compilation and production frontend build. Existing Rollup annotation and large-chunk warnings remain. |
+| `node .tools/api-runtime/routing-bootstrap.mjs` | **passed**, actual freshly compiled entrypoint under both Vercel Production and ordinary local environment settings, direct original HTTP paths, GET/POST/query/root/unknown behavior and strict Origin validation; both module-loader restrictions enabled. No Services transform emulator or database query for guest probes. |
+| Scope/secrets, native configuration/upload/browser-output audit, documentation links and `git diff --check` | **passed**, only the intended five files; exactly one Vercel-only mount removal, no API service transforms, unchanged entrypoint/build/output/web routing, existing auth/security/wallet/persistence handlers, dependency pins, UI/branding and blockchain source. Private env/credentials/generated files and existing untracked portfolio artifacts excluded. |
+| Corrected Production deployment and signed hosted wallet/Neon flow | **not run**; confirm the deployed commit, then follow [the hosted checklist](vercel.md#hosted-verification-after-review). A local pass does not establish hosted recovery. |
 
 ## Choosing checks
 

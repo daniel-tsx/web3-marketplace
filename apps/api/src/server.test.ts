@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import Fastify from 'fastify';
 import { privateKeyToAccount } from 'viem/accounts';
 import { Keypair } from '@solana/web3.js';
 import nacl from 'tweetnacl';
@@ -21,6 +22,83 @@ const solA = Keypair.generate();
 const solB = Keypair.generate();
 const suiA = new Ed25519Keypair();
 const suiB = new Secp256k1Keypair();
+
+test('Vercel original /api paths reach native Fastify routes with query strings intact', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db, 'https://marketplace.example', Fastify, true);
+  t.after(() => app.close());
+  app.get('/query-test', (request) => ({ url: request.url, query: request.query }));
+  for (const url of ['/api/me', '/api/me?next=%2Fapi%2Fme', '/me']) {
+    const response = await app.inject({ url });
+    assert.equal(response.statusCode, 401, url);
+    assert.equal(response.json().error.code, 'unauthenticated');
+    assert.equal(response.headers['cache-control'], 'no-store');
+  }
+  const query = await app.inject({ url: '/api/query-test?value=a%2Bb&value=c&next=%2Fapi%2Fme' });
+  assert.equal(query.statusCode, 200);
+  assert.equal(query.json().url, '/query-test?value=a%2Bb&value=c&next=%2Fapi%2Fme');
+  assert.deepEqual(query.json().query, { value: ['a+b', 'c'], next: '/api/me' });
+  for (const url of ['/api', '/api/', '/api?probe=1', '/api/?probe=1', '/api/runtime-probe', '/api/api/me', '/apiculture', '/apiary/me', '/API/me', '/api%2Fme']) {
+    const response = await app.inject({ url, headers: { accept: 'text/html' } });
+    assert.equal(response.statusCode, 404, url);
+    assert.match(response.headers['content-type'] as string, /application\/json/);
+  }
+});
+
+test('Vercel /api POST routes retain origin checks, validation, signed sessions and logout', async (t) => {
+  const origin = 'https://marketplace.example';
+  const app = await buildServer((await createTestDatabase(t)).db, origin, Fastify, true);
+  t.after(() => app.close());
+  const post = (path: string, payload: object, cookie?: string) => app.inject({ method: 'POST', url: `/api${path}`, payload, headers: { origin, ...(cookie ? { cookie } : {}) } });
+  for (const foreign of [undefined, 'null', ORIGIN, `${origin}.attacker.example`]) {
+    const response = await app.inject({ method: 'POST', url: '/api/auth/challenge?probe=1', payload: {}, headers: foreign ? { origin: foreign } : {} });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().error.code, 'invalid_origin');
+  }
+  for (const [path, status, code] of [
+    ['/auth/challenge?probe=1', 400, 'invalid_wallet'],
+    ['/auth/verify', 400, 'invalid_request'],
+    ['/wallets/link/challenge', 401, 'unauthenticated'],
+    ['/wallets/link/verify', 401, 'unauthenticated'],
+  ] as const) {
+    const response = await post(path, {});
+    assert.equal(response.statusCode, status, path);
+    assert.equal(response.json().error.code, code);
+  }
+  const preflight = await app.inject({ method: 'OPTIONS', url: '/api/auth/challenge', headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' } });
+  assert.equal(preflight.statusCode, 204);
+  assert.equal(preflight.headers['access-control-allow-origin'], origin);
+  const issued = await post('/auth/challenge?next=%2Fapi%2Fme', { ecosystem: 'evm', address: evmA.address });
+  assert.equal(issued.statusCode, 200);
+  const challenge = issued.json();
+  const proof = { ecosystem: 'evm', address: evmA.address, challengeId: challenge.challengeId, signature: await evmA.signMessage({ message: challenge.message }) };
+  const loggedIn = await post('/auth/verify', proof);
+  assert.equal(loggedIn.statusCode, 200);
+  const cookie = loggedIn.headers['set-cookie'] as string;
+  for (const flag of [/; Secure/, /; HttpOnly/, /; SameSite=Lax/, /; Path=\//]) assert.match(cookie, flag);
+  const me = await app.inject({ url: '/api/me?probe=1', headers: { cookie } });
+  assert.equal(me.statusCode, 200);
+  assert.equal(me.json().userId, loggedIn.json().userId);
+  assert.equal((await post('/auth/verify', proof)).statusCode, 409);
+  const forbiddenLogout = await app.inject({ method: 'POST', url: '/api/logout', headers: { cookie, origin: ORIGIN } });
+  assert.equal(forbiddenLogout.statusCode, 403);
+  assert.equal((await app.inject({ url: '/api/me', headers: { cookie } })).statusCode, 200);
+  assert.equal((await post('/logout', {}, cookie)).statusCode, 200);
+  assert.equal((await app.inject({ url: '/api/me', headers: { cookie } })).statusCode, 401);
+  for (const url of ['/api', '/api/runtime-probe', '/api/api/auth/challenge']) {
+    const response = await app.inject({ method: 'POST', url, payload: {}, headers: { origin } });
+    assert.equal(response.statusCode, 404, url);
+    assert.match(response.headers['content-type'] as string, /application\/json/);
+  }
+});
+
+test('ordinary local API routes keep their unprefixed paths', async (t) => {
+  const app = await buildServer((await createTestDatabase(t)).db, ORIGIN, Fastify, false);
+  t.after(() => app.close());
+  assert.equal((await app.inject({ url: '/me' })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: '/auth/challenge', payload: {}, headers: { origin: ORIGIN } })).statusCode, 400);
+  for (const url of ['/api/me', '/api/me?probe=1']) assert.equal((await app.inject({ url })).statusCode, 404);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/auth/challenge', payload: {}, headers: { origin: ORIGIN } })).statusCode, 404);
+});
 
 test('EVM login, exact challenge, replay and expiry', async (t) => {
   const db = (await createTestDatabase(t)).db;

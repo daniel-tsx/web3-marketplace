@@ -40,9 +40,17 @@ async function verifyWalletSignature(ecosystem: Ecosystem, address: string, mess
   } catch { return false; }
 }
 
-export async function buildServer(db: Database, frontendOrigin = 'http://localhost:5173', createApp: typeof Fastify = Fastify) {
+export async function buildServer(db: Database, frontendOrigin = 'http://localhost:5173', createApp: typeof Fastify = Fastify, isVercel = process.env.VERCEL === '1') {
   const secureCookie = new URL(frontendOrigin).protocol === 'https:';
-  const app = createApp({ logger: false, bodyLimit: 16_384 });
+  const app = createApp({
+    logger: false, bodyLimit: 16_384,
+    // Services preserves the public mount; normalize it before Fastify routing.
+    rewriteUrl: isVercel ? (request) => {
+      const url = request.url ?? '/';
+      if (url === '/api' || url.startsWith('/api?')) return `/${url.slice(4)}`;
+      return url.startsWith('/api/') ? url.slice(4) : url;
+    } : undefined,
+  });
   await app.register(cookie);
   await app.register(cors, { origin: frontendOrigin, credentials: true });
 

@@ -2,12 +2,12 @@
 
 Status: **current**. This owns the additional Vercel deployment target. The
 API uses PostgreSQL for durable identity storage. Native Services routing and
-hosted-origin policies pass local checks. Production `ce4e27f` includes the earlier
-entrypoint packaging correction, but now fails on a different dependency import:
-[CommonJS rpc-websockets requires ESM-only UUID](#production-dependency-loading-failure-after-ce4e27f).
-The dependency correction is finalized locally for the existing Git integration.
-HTTPS browser authentication and
-hosted database lifecycle remain unverified.
+hosted-origin policies pass local checks. Production `1b7e299` now initializes
+Fastify and returns JSON, verifying the dependency-loading correction. It still
+passes `/api/me` to an application route registered as `/me`; the
+[mount-prefix correction](#hosted-api-mount-prefix-mismatch-after-1b7e299) is
+reviewed locally; hosted verification remains pending. HTTPS browser
+authentication and hosted database lifecycle remain unverified.
 This smoke target covers the web shell and authentication; blockchain trading
 requires separate deployments and is outside this run.
 
@@ -41,7 +41,7 @@ secret boundary. Keep only safe `.env.example` files in source control.
 
 | Public request | Service | Application path |
 | --- | --- | --- |
-| `/api`, `/api/*` | `api` | Service-local `request.path` transforms remove `/api`; `/api/me` reaches Fastify `/me`. |
+| `/api`, `/api/*` | `api` | Services forwards the original path. With `VERCEL=1`, Fastify removes exactly one `/api` mount before routing; `/api/me` reaches `/me`. |
 | All other paths | `web` | File URLs, `/assets/*` and Vite `/@*` requests bypass the SPA rewrite; extensionless application paths serve `index.html`. |
 
 The API rule precedes the web catch-all. API misses stay API responses and cannot
@@ -50,10 +50,13 @@ Fastify routes stay unchanged for ordinary local clients. There are no existing
 health or operational endpoints to relocate; unauthenticated `/api/me` should
 return JSON with HTTP 401 when the API is operational.
 
-The API's explicit path transforms follow [Vercel's service routing rules](https://vercel.com/docs/project-configuration/vercel-json#request-path-transform-in-a-service).
-A rewrite changes route selection, while `request.path` changes the path the
-runtime reads. The earlier API rewrite alone did not establish that Fastify would
-observe `/me`. The web fallback excludes assets, Vite internals and paths containing
+The API follows [Vercel's original-path service contract](https://vercel.com/docs/services/routing).
+The former service-level transforms worked in the local CLI but did not change
+the URL observed by hosted Fastify. They have been removed so only the API owns
+mount removal, through Fastify's pre-routing `rewriteUrl` option. It preserves
+query strings and unprefixed routes, does not match `/apiculture` or `/apiary`,
+and leaves ordinary API development without `VERCEL=1` unchanged.
+The web fallback excludes assets, Vite internals and paths containing
 a dot, so script/style requests retain their paths. The current application has
 no client routes containing dots. Actual local Services checks cover `/api`,
 `/api/*`, preserved query strings, API-only JSON 404s, deep links and Vite scripts.
@@ -119,7 +122,7 @@ explicitly, with testnets for the initial demo.
 | `API_HOST` | api | Optional; `127.0.0.1`, or `0.0.0.0` in a container. | None | Omit. | Omit. | Server-only/local; preserve platform handling. |
 | `API_PORT` | api | Optional; defaults to `3001`. | None | Omit. | Omit. | Server-only/local; `PORT` takes precedence. |
 | `PORT` | api | Optional outside Vercel; overrides `API_PORT`. | None | Platform-managed. | Platform-managed. | Server-only/deployment; do not enter manually. |
-| `VERCEL` | api | Absent ordinarily; injected by `vercel dev`. | None | Platform-managed. | Platform-managed. | Server-only/deployment; attaches database pool lifecycle handling. |
+| `VERCEL` | api | Absent ordinarily; injected by `vercel dev`. | Controlled routing tests. | Platform-managed. | Platform-managed. | Server-only/deployment; attaches database pool lifecycle handling and enables `/api` mount removal before routing. |
 | `VERCEL_ENV` | api | Platform `development` in `vercel dev`. | Controlled metadata. | Platform `preview`. | Platform `production`. | Server-only/deployment; selects origin policy, never enter manually. |
 | `VERCEL_URL` | api | Not needed. | Controlled metadata. | Required platform-generated deployment hostname. | Not used for origin selection. | Server-only/deployment; exact Preview trust source, never enter manually. |
 
@@ -171,7 +174,7 @@ so a custom endpoint must support its browser transport, not just JSON-RPC.
 
 Leave `VITE_API_URL` absent in both Preview and Production: the existing browser
 client selects `/api` for hosted production builds. The top-level API rule runs
-before the SPA rule; the API service transforms the observed path for Fastify.
+before the SPA rule; Fastify normalizes the forwarded `/api` mount before routing.
 The frontend continues to send credentials. The API keeps exact POST Origin
 validation, credentialed CORS, HttpOnly/SameSite=Lax cookies and `no-store` replies;
 HTTPS origins now set and clear **Secure** cookies. Cookie Path remains `/`, and
@@ -580,7 +583,10 @@ unchanged. Hosted health still requires the new deployment's runtime checks.
 
 ## Production dependency-loading failure after ce4e27f
 
-Status: **current diagnosis; correction finalized; hosted verification pending**. Read-only CLI
+Status: **historical dependency failure; correction shipped in `1b7e299`**.
+Hosted Fastify JSON now verifies module initialization; the separate
+[mount-prefix mismatch](#hosted-api-mount-prefix-mismatch-after-1b7e299) remains.
+The original read-only CLI
 inspection confirms Production deployment `dpl_2CQEgJ9vNJbb9XXTCBj8mSNFGeQe`,
 `web3-marketplace-3p6l6b9h4-daniel-tsx.vercel.app`, at exact commit
 `ce4e27f3f27799a4f5e757d9470895631e422798`. Its canonical alias remains
@@ -711,7 +717,7 @@ The original investigation did not commit, push or redeploy. The finalization
 request authorizes committing and pushing this correction to `origin/main`;
 the existing Vercel Git integration handles deployment, with no manual deploy.
 
-Read-only canonical probes still return HTTP 500 with `FUNCTION_INVOCATION_FAILED`
+During the original `ce4e27f` investigation, read-only canonical probes returned HTTP 500 with `FUNCTION_INVOCATION_FAILED`
 for both paths, while the new UI HTML loads. The immutable deployment URL returns
 a platform JSON 401 with `error.code = "401"` and no marketplace UI; it is not the
 API's `unauthenticated` response and must not be counted as API health.
@@ -733,3 +739,89 @@ and wallet controls. On the intended isolated hosted auth target, perform real
 signed login, persistent `/api/me` **200**, replay/Origin rejection and logout
 followed by **401**, preserving Secure/HttpOnly/SameSite cookies. That SQL-backed
 flow, unlike an unauthenticated probe, verifies the hosted Neon connection.
+
+## Hosted API mount-prefix mismatch after 1b7e299
+
+Status: **correction reviewed and locally verified; hosted correction unverified**.
+The final review request authorizes committing this five-file correction with
+`fix: handle Vercel API prefix in Fastify routing` and pushing to `origin/main`.
+The existing Vercel Git integration owns deployment; no manual deployment or
+hosted database change is part of this finalization.
+
+### Evidence and root cause
+
+Production deployment `dpl_AizNhuosDh6d7cERtNJ2MvNLcBKx` is Ready at exact commit
+`1b7e299112f86008d3854f5aed352326fbeb64da`. Read-only metadata retains both API
+`request.path` transforms from that commit. Nevertheless, a canonical request to
+`/api/me?probe=mount` returns HTTP **404** and native Fastify JSON:
+
+```json
+{"message":"Route GET:/api/me?probe=mount not found","error":"Not Found","statusCode":404}
+```
+
+`/api/runtime-probe`, `/api` and `/api/` also return Fastify JSON 404 without an
+`x-vercel-error` header. `/apiculture` still reaches the web SPA. The dependency
+failure is resolved; the remaining failure is a mount mismatch between the
+original public `/api` URL and Fastify's registered unprefixed routes.
+
+The cached CLI `62.7.0` dev implementation's `applyRequestTransforms` parses
+`req.url`, replaces its pathname and writes the formatted URL back before
+invocation/proxying. That explains why the earlier local Services smoke reached
+`/me`. It does not prove the hosted function receives that transformed URL.
+The current [Services routing reference](https://vercel.com/docs/services/routing)
+documents original-path forwarding and service-level path transforms. The
+configuration is syntactically valid and the hosted metadata includes it, but
+the observed native runtime does not receive the transformed URL. The exact
+internal edge/builder reason is not established; no unsupported claim that a
+specific Vercel component drops or restores the transform is needed for this fix.
+
+### Single owner for the public mount
+
+[server.ts](../../apps/api/src/server.ts) enables Fastify's
+[pre-routing `rewriteUrl`](https://fastify.dev/docs/latest/Reference/Server/#rewriteurl)
+when `VERCEL=1`, including Vercel local development. It removes one exact `/api`
+segment before the existing router runs. `/api` becomes `/`, `/api?x=1` becomes
+`/?x=1`, and `/api/me?x=1` becomes `/me?x=1`, preserving the raw query encoding.
+Already unprefixed paths remain unchanged. `/api/api/me` is stripped only once;
+case variants, encoded mount separators and similar prefixes are not aliases.
+Ordinary local API startup retains its original unprefixed routes.
+
+[vercel.json](../../vercel.json) removes only the API service's two transforms,
+preventing the local CLI and Fastify from both stripping a prefix. Public service
+selection, API root/entrypoint/build/output settings, web service/SPA exclusions
+and frontend same-origin `/api` calls are unchanged. The Fastify entrypoint,
+auth handlers/security hooks, cookies, persistence and blockchain/UI sources
+are unchanged. No environment variable, package or dependency override is added.
+
+[server.test.ts](../../apps/api/src/server.test.ts) passes the observed original
+hosted paths straight to native Fastify, without emulating Services transforms.
+Two regressions failed before the correction (GET 404 instead of 401; POST
+challenge 404 instead of its normal 400 validation response). They now cover
+GET/POST, raw/repeated query parameters, exact-prefix boundaries, `/api` root,
+unknown routes, preflight, Origin rejection, real signed login/session/replay/
+logout and HTTPS cookies. A third regression preserves ordinary local routes.
+Direct HTTP checks additionally execute the unchanged compiled entrypoint with
+actual Vercel environment settings, no URL preprocessor and the existing ESM
+loader restrictions. [The verification record](verification.md#hosted-routing-correction-on-2026-10-08)
+distinguishes those checks from the local CLI emulator and hosted verification.
+
+### Hosted verification after review
+
+After the Git-integrated Production deployment becomes Ready, confirm that its
+commit matches the pushed routing correction.
+From Command Prompt, guest requests must return application JSON:
+
+```bat
+curl.exe -i -H "Accept: application/json" "https://web3-marketplace-phi.vercel.app/api/me?probe=mount"
+curl.exe -i -H "Accept: text/html" https://web3-marketplace-phi.vercel.app/api/runtime-probe
+curl.exe -i https://web3-marketplace-phi.vercel.app/api
+curl.exe -i -X POST -H "Origin: https://web3-marketplace-phi.vercel.app" -H "Content-Type: application/json" --data "{}" "https://web3-marketplace-phi.vercel.app/api/auth/challenge?probe=mount"
+```
+
+Expect **401**/`unauthenticated`/`Cache-Control: no-store`, **404 JSON**, **404 JSON**
+and **400**/`invalid_wallet`, respectively. An empty challenge body tests the real
+POST route without a database write; missing/foreign Origin must still produce
+**403**/`invalid_origin`. No response should have `FUNCTION_INVOCATION_FAILED` or
+an `x-vercel-error` header. Check runtime logs, then homepage/deep links and actual
+JS/CSS/image assets. Real signed hosted login/session/logout on an authorized
+isolated identity target remains necessary to establish Neon-backed persistence.
