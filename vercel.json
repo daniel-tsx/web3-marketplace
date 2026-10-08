@@ -6,6 +6,7 @@
       "framework": "fastify",
       "entrypoint": "src/index.ts",
       "buildCommand": "pnpm build",
+      "outputDirectory": ".",
       "devCommand": "pnpm exec tsx src/index.ts",
       "routes": [
         {

@@ -51,6 +51,33 @@ test('EVM login, exact challenge, replay and expiry', async (t) => {
   } finally { await app.close(); }
 });
 
+test('session lookup survives a new API instance and rejects missing, invalid and expired sessions', async (t) => {
+  const { db, connect } = await createTestDatabase(t);
+  const first = await buildServer(db);
+  const second = await buildServer(connect());
+  const admin = connect();
+  t.after(async () => { await Promise.all([first.close(), second.close(), admin.close()]); });
+  const challenge = (await first.inject({ method: 'POST', url: '/auth/challenge', headers: { origin: ORIGIN }, payload: { ecosystem: 'evm', address: evmA.address } })).json();
+  const verified = await first.inject({ method: 'POST', url: '/auth/verify', headers: { origin: ORIGIN }, payload: {
+    ecosystem: 'evm', address: evmA.address, challengeId: challenge.challengeId, signature: await evmA.signMessage({ message: challenge.message }),
+  } });
+  assert.equal(verified.statusCode, 200);
+  const cookie = verified.headers['set-cookie'] as string;
+  await first.close();
+  const restored = await second.inject({ url: '/me', headers: { cookie } });
+  assert.equal(restored.statusCode, 200);
+  assert.equal(restored.json().userId, verified.json().userId);
+  assert.equal(restored.json().wallets[0].address, evmA.address.toLowerCase());
+  await admin.query('UPDATE sessions SET expires_at = 0 WHERE user_id = $1', [verified.json().userId]);
+  for (const value of [undefined, 'vehicle_session=invalid-session', cookie]) {
+    const rejected = await second.inject({ url: '/me', headers: value ? { cookie: value } : {} });
+    assert.equal(rejected.statusCode, 401);
+    assert.match(rejected.headers['content-type'] as string, /application\/json/);
+    assert.equal(rejected.json().error.code, 'unauthenticated');
+    assert.equal(rejected.headers['cache-control'], 'no-store');
+  }
+});
+
 test('HTTPS origin uses secure cookies and rejects other origins', async (t) => {
   const origin = 'https://marketplace.example';
   const app = await buildServer((await createTestDatabase(t)).db, origin);

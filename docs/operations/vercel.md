@@ -2,8 +2,10 @@
 
 Status: **current**. This owns the additional Vercel deployment target. The
 API uses PostgreSQL for durable identity storage. Native Services routing and
-hosted-origin policies pass local checks. The first hosted deployment still needs
-to verify Vercel builds, HTTPS browser authentication and database lifecycle.
+hosted-origin policies pass local checks. The hosted API currently fails during
+ESM loading; the [packaging correction below](#hosted-api-module-loading-failure-on-2026-10-08)
+is prepared locally and awaits a new deployment. HTTPS browser authentication
+and hosted database lifecycle remain unverified.
 This smoke target covers the web shell and authentication; blockchain trading
 requires separate deployments and is outside this run.
 
@@ -23,6 +25,10 @@ file-based API handlers are needed. The bootstrap directly imports and supplies
 Fastify so the native builder discovers the listening entrypoint. `listen()` is
 not awaited at module scope because Vercel intercepts it while importing the
 application. Ordinary local startup still opens its configured listener.
+The API service sets `outputDirectory: "."` so the native Services builder
+bundles that source entrypoint instead of promoting `tsc`'s `dist/index.js` to
+the function root. Keep this setting even though the API build emits `dist`;
+the web service retains its separate `outputDirectory: "dist"`.
 Vite uses the CLI-assigned `PORT`. Use CLI **62.7.0 or newer** for Services;
 54.11.1 rejects service-object rewrite destinations.
 
@@ -433,3 +439,137 @@ then login, session reload, sensitive linking and logout, with rejected foreign
 Origins and intact JS/CSS responses. Do not interpret local chain errors as
 authentication or Services verification. This run made no commit, push or
 deployment; the working tree is left for review.
+
+## Hosted API module-loading failure on 2026-10-08
+
+Status: **prepared**, with the production fix **unverified**. The UI revamp was
+committed/pushed before this investigation. The active Production alias
+`web3-marketplace-phi.vercel.app` resolves to deployment
+`dpl_GrQUiet5cqPovmCyKSCMkHrvPHdg`, built from
+`83b134f3ecb3a288731c58254c9be76ee79fdad9`, not the earlier `0f18865` deployment.
+Both deployments were Ready; Ready did not establish API runtime health.
+
+### Diagnosis and minimal correction
+
+The sanitized runtime log for `GET /api/me` at **2026-10-08 03:05:55.265 UTC**
+shows the Node process exiting while loading the `services/api/index` function:
+
+```text
+/var/task/index.js:1
+import { attachDatabasePool } from '@vercel/functions';
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1861:18)
+```
+
+This occurs before configuration validation, pool construction, Fastify plugin
+registration, route handling, SQL or response serialization. Neon is not the
+cause of this observed invocation failure. The earlier bootstrap fix is present
+in the deployed commit: direct Fastify import, real constructor injection and
+unawaited adapter-intercepted `listen()`.
+
+The cloud build log identifies the native Services `@vercel/backends` builder
+and `pnpm build`/`tsc`. With no API output-directory setting, the builder reuses
+the detected `dist` entrypoint after the build and flattens its files into the
+function root. Local CLI 62.7.0 / builder 17.0.0 reproduced a handler `index.js`,
+no root `package.json`, and an API package file still at `apps/api/package.json`.
+The emitted ESM imports therefore lose their package scope; repository-relative
+dependency locations also no longer match the relocated handler. A local Node
+load with automatic module detection disabled reproduced the exact SyntaxError.
+The cloud builder version was not exposed in the build log; the local version
+is evidence of the same packaging behavior, not a claim about its cloud version.
+
+The correction is **one service configuration line** in [vercel.json](../../vercel.json):
+`services.api.outputDirectory = "."`. In the inspected builder this prevents
+automatic reuse of `dist`, while keeping `src/index.ts` as the configured native
+entrypoint. The corrected native build emits `apps/api/src/index.mjs` and retains
+the workspace layout. This matches the workaround described in the
+[upstream Services packaging issue](https://github.com/vercel/vercel/issues/17651).
+The [service configuration reference](https://vercel.com/docs/services/config-reference#outputdirectory)
+documents the setting. No root module-type change, framework replacement,
+manual function handler or runtime auth/database change is required.
+
+### Environment and Neon findings
+
+Read-only CLI inspection confirmed repository-root Services, Node `24.x`, workspace
+sources enabled, automatic system-variable exposure enabled, `DATABASE_URL`
+present as a sensitive variable for Production/Preview, and `FRONTEND_ORIGIN`
+scoped to Production. The origin was privately checked with the API's actual
+validator and matches `https://web3-marketplace-phi.vercel.app` exactly. Neither
+database credentials nor environment values were printed. No manual platform
+`VERCEL`, `VERCEL_ENV`, `VERCEL_URL` or `PORT` settings were present.
+
+**No dashboard adjustment is required for the identified module-loading failure.**
+Availability of the Production database credential is confirmed; its value was
+not decrypted or compared with the local Neon URL. Preview/Production database
+isolation remains an operator responsibility under the environment matrix above.
+
+Read-only checks of the already configured local Neon pooled URL passed: the
+application's TLS socket is encrypted and its certificate verifies, all six
+expected public tables exist, session/wallet SELECTs execute, and connections can
+be reused and explicitly closed. The pool is created once per application
+instance, uses five connections and a five-second idle timeout, and is attached
+to Vercel's lifecycle by the existing `attachDatabasePool` call. There are no
+startup migrations or per-request pool shutdowns. Driver TLS behavior was not
+weakened. The installed driver warns that `sslmode=require` semantics change in
+a future major version; no dependency or connection setting was changed here.
+
+An initial diagnostic incorrectly used `pg_stat_ssl` for the pooler's backend
+connection; that does not describe the application's TLS connection. The corrected
+socket check passed. Hosted credential correctness, Neon wake-up latency and
+Fluid Compute suspension/reuse still require deployed SQL-backed authentication.
+No Neon schema/data writes or migrations were performed.
+
+### Verification and remaining limits
+
+[The dated verification record](verification.md#vercel-api-runtime-verification)
+contains commands, results and failures. Local Services passed real HTTP auth,
+API prefix/query handling, JSON 401/404, Origin rejection, replay/logout and web
+navigation/script checks using a task-owned schema in disposable localhost
+PostgreSQL. Existing security regressions pass, with one additional test for
+session lookup across instances and missing/invalid/expired sessions.
+
+The corrected native handler passes Node syntax checking. Loading a materialized
+isolated function on this Windows host **failed** on missing scoped pnpm dependency
+aliases (`@mysten/sui`, then `@noble/hashes`); local tracing also omits those aliases
+from ordinary compiled-source traces. This leaves the complete Linux/cloud
+package unverified. Do not count the source-based Services emulator or syntax
+check as a packaged-function runtime pass. No production redeployment was made;
+read-only Production probes still return HTTP 500 with the
+`FUNCTION_INVOCATION_FAILED` response header, while `/` returns the new UI HTML.
+
+### New-deployment verification procedure
+
+1. Review/commit the configuration, session test and documentation changes, then
+   push only when authorized. With the existing Git integration, a push to `main`
+   creates a new Production deployment. Redeploying the old `83b134f` source alone
+   does not include this fix. Confirm the new deployment's exact commit and both
+   service build results in Vercel; keep the checked-in API output setting.
+2. From an unauthenticated terminal, run:
+
+   ```bat
+   curl.exe -i -H "Accept: application/json" https://web3-marketplace-phi.vercel.app/api/me
+   curl.exe -i -H "Accept: text/html" https://web3-marketplace-phi.vercel.app/api/runtime-probe-missing
+   ```
+
+   Expect `/api/me` **401**, JSON `error.code = unauthenticated`, `Cache-Control:
+   no-store`, and no invocation-error header. Expect the unknown API route **404**
+   with JSON even when HTML is accepted. Check that logs have no module-loading
+   or dependency-resolution exception. Repeat the read after an idle interval;
+   this checks function startup, but no-cookie `/me` still performs no SQL.
+3. Load `/`, a SPA deep link, and actual JS/CSS URLs from the new page. Confirm
+   200 responses, proper content types and all three wallet controls. Do not
+   connect/sign just to establish page rendering.
+4. On the intended isolated hosted test target, perform real wallet challenge,
+   signed login, session reload, sensitive wallet linking and logout. Use the
+   exact Preview deployment origin or canonical Production origin as applicable.
+   Confirm Secure/HttpOnly/SameSite=Lax/Path=/ cookies without Domain, rejected
+   foreign Origins, replay rejection, invalid/expired-session 401s and persistence
+   across independent invocations/idle periods. Never publish cookies or proofs.
+   This step exercises Neon; do not replace it with a fabricated auth response.
+
+The initial diagnostic run left the fix ready for review and a new build. That
+phase made no commit, push, redeployment, dashboard mutation, production migration
+or blockchain change. The subsequent authorized pre-push review approved the
+four-file change; [its fresh checks and exclusions](verification.md#pre-push-review-on-2026-10-08)
+are recorded separately. Frontend source/branding and production auth logic remain
+unchanged. Hosted health still requires the new deployment's runtime checks.

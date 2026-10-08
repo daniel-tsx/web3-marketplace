@@ -235,6 +235,75 @@ not portable repository test prerequisites. Native signing, confirmation,
 reauthentication and purchase builders remain unchanged. No deployment,
 environment/schema change or chain resource mutation was performed during verification.
 
+## Vercel API runtime verification
+
+Executed on **2026-10-08**, Windows, Node `24.19.0`, pnpm `10.26.0`, cached
+Vercel CLI `62.7.0` / native backend builder `17.0.0`. The
+[Vercel diagnosis and new-deployment procedure](vercel.md#hosted-api-module-loading-failure-on-2026-10-08)
+owns the root cause and correction. Active Production is `83b134f`; the local
+configuration fix had not yet been committed, pushed or deployed during this
+initial diagnostic phase. The subsequent authorized review is recorded below.
+
+| Command/check | Result and scope |
+| --- | --- |
+| Read-only Vercel CLI project/deployment/env/log inspection | **passed**, intended Services project, Production alias/commit, Node 24 and exact origin. Sanitized `GET /api/me` trace proves `Cannot use import statement outside a module` before application initialization. Connector deployment reads first **failed** with account-scope 403; the CLI fallback worked after user login. Secrets were not printed and dashboard settings were not changed. |
+| Native build regression: `node .tools/api-runtime/build.mjs before` and `node .tools/api-runtime/load.mjs before` before the fix | **passed as a reproduction**, original configuration emits root `index.js` without a root ESM package. Local Node with automatic module detection disabled rejects the first import with the exact hosted SyntaxError. This is a build/loader regression, not a database result. |
+| `node .tools/api-runtime/build.mjs fixed` after the fix | **passed**, actual native builder with installed dependencies and localhost-only settings emits `apps/api/src/index.mjs` when API `outputDirectory` is `.`; no deployment. |
+| `node --no-experimental-detect-module --check .tools/api-runtime/fixed-function/apps/api/src/index.mjs` | **passed**, generated handler syntax. Does not execute imports or routes. |
+| `node .tools/api-runtime/load.mjs after` / `node .tools/api-runtime/load.mjs fixed` | **failed**, isolated Windows function materialization cannot resolve scoped pnpm aliases (`@mysten/sui`, then `@noble/hashes`). Ordinary local NFT traces also omit those aliases. Complete Linux/cloud packaging remains **unverified**; no deployment-runtime pass is inferred from the other checks. |
+| `pnpm api:test` via `node .tools/postgres-migration/test.mjs` | **passed**, all 50 tests on dedicated localhost PostgreSQL with per-test schemas. Includes new cross-instance session lookup and missing/invalid/expired-session 401s; cryptographic EVM/Solana/Sui, H2, exact origins, cookie flags, replay, persistence and concurrency regressions remain passing. Earlier 49-test pass preceded the added test. |
+| `node .tools/api-runtime/local-db.mjs` launcher | **failed** as a launcher diagnostic: the Windows `pg_ctl` pipe remained open until cleanup, so its deferred availability probe ran after cluster shutdown. Separate database connections, the 50-test suite and HTTP smoke passed while the cluster was running. The task-owned schema was removed and the cluster stopped with its files preserved. |
+| `pnpm typecheck` / `pnpm lint` | **passed**, recursive workspace TypeScript and frontend ESLint. Final API build also typechecks the added regression. API lint **not run**, none configured. |
+| `pnpm --dir apps/api build` / `pnpm build` | **passed**, final API TypeScript and unchanged web build. Existing Vite annotation/large-chunk warnings remain; no dependency/lockfile change. |
+| `pnpm execution:test` | **passed**, all 37 browser API-base/credential, resolver, preview, H1/H3 and Sui helper tests. No real wallet transaction. |
+| `node .tools/hosted-smoke/audit.mjs` | **passed**, corrected Services schema, listening Fastify entrypoint, SPA asset exclusions, 191 SDK upload candidates and 89 browser outputs checked against private local database signatures. No private env/tooling/fixtures/artifacts uploaded; no credentials printed. Scoped leakage check, not an exhaustive audit. |
+| Native `vercel dev -L --listen 127.0.0.1:3000` via `node .tools/api-runtime/run-dev.mjs`; `node .tools/api-runtime/http-smoke.mjs` | **passed**, both services, real HTTP JSON `/api/me` 401 and API-only 404 (including HTML Accept), preserved query/prefix, foreign/missing Origin rejection, real signed EVM challenge/login, session lookup, replay/logout, SPA deep links and Vite script MIME. Used a task-owned schema in dedicated localhost PostgreSQL. Local migrations/test rows only; no hosted writes. |
+| Chromium via `agent-browser --session api-runtime` | **passed**, local Services main page, preview catalogue and all three wallet controls render. Browser-only aborted account request shows the existing account-error/retry surface while browsing remains available. No wallet connection/signature. |
+| `node .tools/api-runtime/neon-readonly.mjs` | **passed**, existing configured Neon pooled URL: application TLS encryption and verified certificate, six expected tables, session/wallet SELECTs in a read-only transaction, pool reuse/cleanup. Initial `pg_stat_ssl` assertion **failed** because it measured PgBouncer's backend socket; corrected application socket check passed. Driver reports its existing future-major TLS-mode warning. Vercel's sensitive database value was not read, so target identity/hosted lifecycle are unverified. |
+| `node .tools/api-runtime/production-probe.mjs` | **failed** API health as expected before redeployment: `/api/me` and unknown API path return HTTP 500 with `x-vercel-error: FUNCTION_INVOCATION_FAILED`; a fresh matching runtime log has the same ESM exception. `/` **passed** HTTP 200 with UI-revamp HTML. Read-only GETs, no remote auth/data mutation. |
+| Diff/docs/scope review | **passed**, local link/anchor validation and `git diff --check`. Changes are the API service output setting, one auth regression and the owning deployment/verification docs; UI/runtime API/database/chain sources, lockfile and existing portfolio artifacts are preserved. |
+| Hosted fixed deployment, signed browser auth, Fluid Compute suspension and Neon cold-start lifecycle | **not run**, redeployment is outside this run's authorization. Local Services uses source loaders and does not prove the final Linux cloud package or HTTPS browser cookie enforcement. |
+
+Task-only tooling/artifacts live in ignored `.tools/api-runtime`; they are not new
+workspace dependencies or portable test prerequisites. The task-owned Services
+server/browser and local smoke schema are cleaned up after verification; the
+existing test cluster is stopped without resetting its files. No hosted database
+migration, environment change, commit, push or deployment was performed.
+
+### Pre-push review on 2026-10-08
+
+Status: **passed for commit**, with deployed runtime verification still pending.
+The user authorized committing and pushing the reviewed fix to `origin/main`.
+Review verdict: **Approve with follow-ups**; the follow-up is the exact new-commit
+cloud package, `/api/me`, assets and HTTPS/SQL-backed auth verification in the
+[deployment procedure](vercel.md#new-deployment-verification-procedure).
+
+- **Passed:** fresh `pnpm api:test` (50 tests, dedicated localhost PostgreSQL),
+  `pnpm execution:test` (37), `pnpm typecheck`, `pnpm lint`,
+  `pnpm --dir apps/api build` and `pnpm build`. Existing Vite dependency annotation
+  and large-chunk warnings remain.
+- **Passed:** actual native builder via `node .tools/api-runtime/build.mjs review`
+  selects `src/index.ts`, emits `apps/api/src/index.mjs` / `nodejs24.x`, and the
+  emitted handler passes Node syntax checking. The isolated Windows package-load
+  limitation from the initial investigation remains; no Linux/cloud pass inferred.
+- **Passed:** fresh localhost Services HTTP smoke, including signed login, session,
+  replay, logout, Origin rejection, API JSON 401/404, prefix/query behavior and web
+  deep links/scripts. Test-only schema and server/cluster cleanup completed.
+- **Passed:** native schema/entrypoint/upload/browser-output audit (191 upload
+  candidates, 89 web outputs), tracked-file audit (139 files; only five safe
+  placeholder/localhost/synthetic database examples), 259 local documentation
+  links/anchors and `git diff --check`. Initial audit rules flagged public loopback
+  examples, synthetic tests and existing UI screenshots; those were inspected and
+  correctly classified before the final pass. No actual credential leak found.
+- **Scope reviewed:** four modified tracked files (service setting, session test,
+  two owning docs) plus four pre-existing untracked portfolio files, eight total
+  rather than the requested count of 16. Portfolio Mermaid/PNG/SVG/README describe
+  the older SQLite snapshot and are excluded, preserved untouched. No generated
+  build/tooling changes, private env files or actual database credentials added.
+  Existing UI/branding, API bootstrap/routes/auth/runtime, lockfile and blockchain
+  deployment/transaction logic are unchanged. Remote `main` matched local
+  `83b134f` before committing; no history rewrite is needed.
+
 ## Choosing checks
 
 For a code change, select the affected matrix rows and regression coverage; do not
