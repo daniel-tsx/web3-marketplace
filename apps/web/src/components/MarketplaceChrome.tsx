@@ -13,8 +13,8 @@ export function EcosystemLabel({ ecosystem }: { ecosystem: Ecosystem }) {
   return <span className="ecosystem-label"><span className={`ecosystem-symbol ${ecosystem}`} aria-hidden="true">{ecosystem === 'evm' ? '◇' : ecosystem === 'solana' ? '≋' : '◊'}</span>{ecosystem === 'evm' ? 'EVM' : ecosystem === 'solana' ? 'Solana' : 'Sui'}</span>;
 }
 
-export function VehicleVisual({ image, alt, preview = false }: { image: string; alt: string; preview?: boolean }) {
-  return <div className="vehicle-visual"><img src={`/vehicles/${image}.webp`} alt={alt} width="900" height="600" loading="lazy" decoding="async" />{preview && <span className="preview-label">Demo Preview</span>}<span className="image-disclosure">Original concept illustration</span></div>;
+export function VehicleVisual({ image, alt, preview = false, sizes = '(max-width: 560px) calc(100vw - 42px), (max-width: 850px) calc((100vw - 76px) / 2), (max-width: 1416px) calc((100vw - 150px) / 3), 422px' }: { image: string; alt: string; preview?: boolean; sizes?: string }) {
+  return <div className="vehicle-visual"><img src={`/vehicles/${image}.webp`} srcSet={`/vehicles/${image}-480.webp 480w, /vehicles/${image}.webp 900w`} sizes={sizes} alt={alt} width="900" height="600" loading="lazy" decoding="async" />{preview && <span className="preview-label">Demo Preview</span>}<span className="image-disclosure">Original concept illustration</span></div>;
 }
 
 export function AssetReadError({ children, onRetry, busy }: { children: ReactNode; onRetry?: () => void; busy?: boolean }) {

@@ -2,7 +2,13 @@
 
 [![CI](https://github.com/daniel-tsx/web3-marketplace/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-tsx/web3-marketplace/actions/workflows/ci.yml)
 
-A production-oriented Web3 engineering case study spanning EVM, Solana, and Sui. One application account can link wallets across all three ecosystems, while each marketplace keeps its native asset, custody, payment, and confirmation model. The implementation binds purchases to reviewed listing terms, requires reauthentication for wallet credential changes, and preserves successful execution when subsequent state reads fail.
+An interactive automotive engineering showcase across EVM, Solana, and Sui. Browse original vehicle concepts without a wallet, inspect each chain’s execution model, and explore how one application account supports independently verified wallets.
+
+**[Explore the live demo →](https://web3-marketplace-phi.vercel.app/)** · [Architecture](docs/architecture/multichain-system.md) · [Verification and limits](docs/operations/verification.md#portfolio-quality-verification)
+
+![Desktop marketplace with original concepts and three ecosystem filters](docs/assets/marketplace/desktop.webp)
+
+The hosted Vite frontend and Fastify/PostgreSQL identity API are live. Public blockchain resources are not deployed or verified for this demo: **Demo Preview concepts cannot be traded**. Local EVM tests, Solana client tests and Sui builders have separate verification scopes; they do not establish live on-chain trading.
 
 ## What this project demonstrates
 
@@ -16,6 +22,19 @@ resources reveal native asset cards and their existing guarded execution flows.
 - **Resource-driven execution:** a vehicle's ecosystem determines the required linked execution wallet, independently of the wallet used to log in.
 - **Three native marketplaces:** noncustodial ERC-721 listings on EVM, PDA-controlled SPL escrow on Solana, and shared Listing objects wrapping Vehicles on Sui.
 - **Explicit correctness boundaries:** reviewed purchase intent, two-proof wallet linking, and read-only reconciliation retries after successful transactions.
+
+<details>
+<summary>Vehicle details, wallet onboarding and mobile browsing</summary>
+
+![Vehicle detail with honest preview status and execution explanation](docs/assets/marketplace/detail.webp)
+
+![Hosted guest wallet onboarding with separate connection and sign-in controls](docs/assets/marketplace/wallets.webp)
+
+<img src="docs/assets/marketplace/mobile.webp" alt="Mobile collection with search and ecosystem filters" width="390" />
+
+Desktop, detail and mobile images show the local Run 3 production preview. The wallet image shows the current hosted guest experience. No signed wallet or blockchain transaction was used to create these captures. Original concept artwork and the self-hosted font’s license are documented in [asset provenance](docs/features/marketplace-presentation.md#original-image-provenance-and-prompts).
+
+</details>
 
 ## Architecture
 
@@ -76,7 +95,7 @@ React / Vite / TypeScript · TanStack Query · Wagmi / Viem / RainbowKit · Fast
 
 **Requires a native toolchain; not runtime-verified on the current Windows host:** Anchor compilation and validator execution, and Sui Move compilation/scenario execution. Offline client tests do not prove either blockchain runtime. Real browser-wallet flows and deployed Sui interaction remain unverified.
 
-[GitHub CI](.github/workflows/ci.yml) checks the reproducible Node/Foundry layers and rejects a generated frontend ABI that differs from the committed artifact. The workflow is locally validated; its first hosted run is pending a push. It does not deploy, seed networks, or run Anchor/Move runtimes.
+[GitHub CI](.github/workflows/ci.yml) checks the reproducible Node/Foundry layers and rejects a generated frontend ABI that differs from the committed artifact. It does not deploy, seed networks, or run Anchor/Move runtimes. [The Run 3 quality record](docs/operations/verification.md#portfolio-quality-verification) includes before/after bundle and browser measurements, accessibility checks, dependency findings and remaining manual work.
 
 ## Quick start
 
@@ -100,7 +119,7 @@ Open `http://localhost:5173`. This starts the frontend and identity service; tra
 
 Public browser configuration is described in [apps/web/.env.example](apps/web/.env.example); copy it to `apps/web/.env.local` when configuring chains. [apps/api/.env.example](apps/api/.env.example) describes the required database connection and optional server overrides; variables must be exported or explicitly loaded. See [setup and environment loading](docs/operations/verification.md#local-setup-boundaries) for submodules, Foundry, and full chain setup.
 
-[Vercel Services deployment](docs/operations/vercel.md) adds one project with a public `/api` Fastify service and a Vite web service. Configure isolated Preview/Production PostgreSQL connections (Neon is the hosted target) and run migrations explicitly. Hosted routing, database connections and public chain deployments still require verification.
+[Vercel Services deployment](docs/operations/vercel.md) uses one project with a public `/api` Fastify service and a Vite web service. Neon stores hosted identity. For your own deployment, configure isolated Preview/Production PostgreSQL connections and run migrations explicitly. Current hosted guest routing is verified separately from signed authentication and public chain deployment.
 
 ## AI-assisted engineering workflow
 

@@ -1,6 +1,6 @@
 /* Signature: an automotive studio. Graphite bays, a sea-glass lane accent,
    generous display type, precise mono asset readouts, and original vehicle renders. */
-@font-face { font-family: Manrope; src: url('/fonts/manrope-variable.ttf') format('truetype'); font-weight: 200 800; font-style: normal; font-display: swap; }
+@font-face { font-family: Manrope; src: url('/fonts/manrope-variable.woff2') format('woff2'); font-weight: 200 800; font-style: normal; font-display: swap; }
 :root {
   --canvas: oklch(18.2% .007 230); --surface: oklch(21.8% .009 230);
   --surface-raised: oklch(25.3% .011 230); --line: oklch(32% .013 230);
@@ -294,6 +294,10 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   .disclosure-body { padding: 20px; } .wallet-row { flex-wrap: wrap; } .wallet-row > p { width: 100%; }
   .site-footer { flex-direction: column; padding-block: 32px; gap: 24px; } .footer-links { flex-wrap: wrap; gap: 8px 24px; } .footer-note { padding-top: 0; }
   dl { grid-template-columns: 100px minmax(0, 1fr); gap: 10px; }
+}
+/* RainbowKit's 368px minimum clips its close control on narrow phones. */
+@media (max-width: 374px) {
+  [data-rk] [role="dialog"] [role="document"] > div > div { min-width: 0; width: calc(100vw - 16px); box-sizing: border-box; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

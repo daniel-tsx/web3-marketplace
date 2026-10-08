@@ -2,7 +2,19 @@
   "name": "multichain-vehicle-marketplace",
   "private": true,
   "packageManager": "pnpm@10.26.0",
-  "pnpm": { "overrides": { "zod": "4.5.0", "@solana/web3.js>rpc-websockets": "9.3.8" } },
+  "pnpm": {
+    "overrides": {
+      "zod": "4.5.0",
+      "@solana/web3.js>rpc-websockets": "9.3.8",
+      "shell-quote@1.10.0": "1.11.0",
+      "source-map-js@1.2.1": "1.2.2",
+      "viem@2.23.2>ws": "8.21.0"
+    },
+    "patchedDependencies": {
+      "@rainbow-me/rainbowkit@2.2.11": "patches/@rainbow-me__rainbowkit@2.2.11.patch",
+      "@mysten/dapp-kit-core@1.6.33": "patches/@mysten__dapp-kit-core@1.6.33.patch"
+    }
+  },
   "scripts": {
     "anvil": "anvil --chain-id 31337",
     "contracts:build": "pnpm --dir packages/contracts build",

@@ -468,6 +468,375 @@ assets/detail/wallet/mobile surfaces and guest API responses. Signed hosted auth
 and chain execution remain separate unverified scopes. No Run 3 or blockchain
 deployment is included.
 
+## Portfolio quality verification
+
+Status: **approved Run 3 evidence**, executed on **2026-10-08**. The measurements
+and initial checks below precede release finalization. The
+[final release check](#run-3-final-release-check) records the subsequent focused
+dependency fixes and fresh regressions authorized for commit/push to `origin/main`.
+No chain deployment, schema change or real blockchain transaction is included. The
+[presentation owner](../features/marketplace-presentation.md) describes behavior,
+asset provenance and the manual GitHub Social Preview upload.
+
+### Baseline, measurement and performance
+
+Baseline is the approved Run 2 commit
+`b4792b1699a5c89f5fb3672594d92169a5484277`. Both builds used Windows, Node
+`24.19.0`, pnpm `10.26.0`, Vite `6.4.3`, the same public local configuration
+and localhost production previews. Audit-only Lighthouse `13.5.0`, axe-core
+`4.14.0`, FontTools `4.66.1` and image tooling are ignored under `.tools/run3/`;
+none was added to product dependencies. Lighthouse used Chrome `154`;
+interaction checks used headless Chromium `150` through agent-browser.
+
+The mobile comparison uses three cold Chrome runs per build and Lighthouse's
+default simulated mobile throttling. Values below are medians. Baseline
+performance scores ranged **51–68**; final scores ranged **73–75**. These are
+local lab measurements, not hosted field Core Web Vitals or a performance SLA.
+The local API and configured local chain resources were unavailable; both builds
+show the same honest guest/demo fallback. Network conditions and machine load
+can affect repeated results.
+
+| Mobile measure | Run 2 baseline | Run 3 final |
+| --- | ---: | ---: |
+| Lighthouse performance | 67 | 75 |
+| First contentful paint | 3,151 ms | 3,051 ms |
+| Largest contentful paint | 6,390 ms | 5,103 ms |
+| Total blocking time | 221 ms | 110 ms |
+| Cumulative layout shift | 0 | 0 |
+| Accessibility / SEO | 100 / 100 | 100 / 100 |
+| Best practices | 96 | 96 |
+
+One matched desktop sample before the SDK accessibility patches improved
+performance **95 → 96**, LCP **1,347 → 1,202 ms**, with CLS **0**. It is
+supporting single-sample evidence, not a repeated desktop benchmark. The mobile
+final series includes both SDK patches. The final narrow-chooser CSS applies
+below 375 px and does not alter Lighthouse's standard mobile viewport. An
+additional run against the final written build reports performance 75, LCP
+5,092 ms, TBT 110 ms, CLS 0 and accessibility/SEO 100.
+
+Bundle figures count actual written production JavaScript files once. Compression
+uses Node's zlib gzip and Brotli, not Vercel transfer headers. Module attribution
+uses Rollup `renderedLength` before final minification and must not be interpreted
+as exact shares of compressed delivery.
+
+| JavaScript measure, bytes | Baseline | Final |
+| --- | ---: | ---: |
+| Largest initial chunk, raw | 1,808,777 | 1,738,063 |
+| Largest initial chunk, gzip | 548,189 | 531,152 |
+| Entry plus largest initial chunk, gzip | 557,727 | 540,691 |
+| All emitted JavaScript, raw | 3,460,512 | 3,465,112 |
+| All emitted JavaScript, gzip | 789,759 | 796,014 |
+| Emitted JavaScript chunks | 73 | 78 |
+
+Initial JavaScript saves **17,036 gzip bytes (3.1%)**. Total emitted gzip size
+grows **6,255 bytes (0.8%)** because splitting creates additional independently
+compressed chunks. This is an initial-loading improvement, not a reduction in
+every output file. Both initial network traces also load the unchanged injected
+wallet icon chunk (477 gzip bytes); the table isolates entry plus application
+code. Deferred chunks include AccountPanel (16,210 raw / 5,350 gzip
+bytes), EVM card (30,685 / 7,311), Solana card (11,410 / 4,104) and Sui card
+(9,948 / 3,712).
+
+Account UI loads on first disclosure and stays mounted after closing. Native
+cards load when readable native resources reveal them; existing mounted-card
+identity is retained through catalog filtering and later read failures. Lazy
+definitions are at module scope. Feature loading/failure has status/alert copy,
+expandable diagnostics and explicit page reload; reload never retries a
+transaction. An actual withheld local account chunk produced the fallback while
+all three concept cards remained usable.
+
+Providers, wallet auto-reconnection, hooks, session/query configuration, resource
+reads and readiness resolver remain eager and unchanged. SDK contexts still
+dominate startup. The largest baseline module contributions are Viem, Sui,
+Noble curves, RainbowKit and Solana web3.js. The rendered graph contains Noble
+curves **1.9.1 / 1.9.7 / 2.4.0** and hashes **1.8.0 / 2.4.0**; incompatible
+cryptographic majors were not forced together. Viem, Ox and bn.js each have one
+rendered version. RainbowKit's Google DM Sans stylesheet request remains in both
+initial network traces because provider setup stays eager. No query polling,
+provider replacement or speculative render optimization was introduced.
+Lighthouse still reports unused SDK code (about 306 KiB estimated savings), a
+long dependency tree and missing large-bundle source maps. The local run logs
+connection-refused errors for unavailable services; these account for the
+best-practices console-error finding and are reflected by visible error states.
+No diagnostics or readiness failure was suppressed to improve a score.
+
+Manrope was losslessly converted from 164,700-byte TTF to 53,696-byte WOFF2,
+retaining all 742 glyphs, character mappings and variable weight axis. The
+responsive hero adds a 33,044-byte 720 px derivative beside the original
+85,704-byte 1440 px image, with matching HTML preload and image `sizes`.
+Three 480 px derivatives total 45,818 bytes; 900 px originals remain available
+for larger/high-density displays. WebP quality 90 and screenshot visual review
+preserve the art direction. Matching mobile traces reduced font-plus-hero
+transfer by approximately **164 KB**. Aspect ratios/dimensions reserve space;
+below-the-fold artwork remains lazy. No external image service or cache policy
+change was added.
+
+### Accessibility, responsive and interaction checks
+
+Opened wallet choosers revealed issues missed by a homepage Lighthouse score:
+RainbowKit exposed three unlabeled decorative images, and Sui's custom wallet
+items violated native list semantics. Exact-version pnpm
+[UI patches](../../patches/README.md) correct these structures without changing
+selection events or SDK versions. All dependency resolutions and peer edges are
+identical after excluding patch hashes. Frozen installation verifies the patches
+apply. A future SDK upgrade must rerun chooser checks and remove patches only
+when the fixes are upstream.
+
+App fixes remove accessible-name/visible-label conflicts from the brand and
+vehicle controls, remove a label on a generic container, give the ecosystem
+group its intended semantics, and make the catalog skip target focusable.
+At 320 px, RainbowKit's 368 px minimum clipped the close control and footer;
+a scoped rule below 375 px fits its content to the viewport. Desktop styling
+and wallet/provider behavior are preserved.
+
+| Browser check | Result and scope |
+| --- | --- |
+| axe WCAG A/AA, WCAG 2.1 A/AA and best-practice checks | **passed**, zero violations on final home/workspace, vehicle detail and opened EVM/Solana/Sui choosers. Includes shadow DOM for Sui. Automated passes are not screen-reader certification; image/background and accessible-name review includes manual inspection. |
+| 1440 / 768 / 390 / 320 px | **passed**, home, workspace, vehicle dialog, filters, empty recovery, readable identifiers/technical panels and footer; no document horizontal overflow or broken images. All three wallet choosers fit at 320 px after the EVM fix. Large detail content remains scrollable within the viewport. |
+| Keyboard | **passed**, skip link focuses catalog; Tab/Shift+Tab containment, Escape and focus restoration in native vehicle/Solana dialogs and SDK choosers. Visible focus indicators retained. No wallet was connected or signed. |
+| Account disclosure | **passed**, panel DOM retained through close/reopen; disconnected sign-in controls disabled and API-unavailable status recoverable. Hosted guest has normal explore-first messaging. |
+| Contrast/touch/reduced motion | **passed** for tested pairs/controls, body/status contrast 6.66:1 or greater, primary controls generally 44 px; compact SDK controls meet the 24 px minimum. Checkbox has a larger label target; inline prose links are exceptions. Browser-emulated reduced motion reports automatic scrolling and zero transition duration. Contrast over original imagery also needs human visual judgment. |
+| Catalog/demo restrictions | **passed**, search/filter/no-match/clear recovery and active-only honest empty state. Concepts have no owner, sale price or native action hooks and cannot initiate a transaction. |
+| Local synthetic transaction harness | **passed**, replacement listing leaves reviewed version 7 disabled; explicit new review uses version 8 once; failed reconciliation retry adds reads without execution. Pending/unverified/rejected/confirmed states remain distinct. Synthetic callbacks prove UI behavior only. |
+| Lazy feature failure | **passed**, actual missing local account chunk yields alert/diagnostics/reload and retains browsing. No implicit transaction or failed-chunk retry. |
+
+Existing automated presentation, session-race, H1 and H3 tests remain the core
+regression coverage. Browser checks cover calm API/network failure, unavailable
+resources and synthetic execution progress; real signature rejection and connected
+network switching require manual wallets. Static handler/AST comparison preserves
+all native approve/list/cancel/buy/read implementations, account authentication
+and linking actions, App resource queries and execution resolution. API/schema,
+providers/bootstrap, chain builders/hooks, confirmation/reconciliation engine,
+H1–H3 mechanisms and Vercel configuration are unchanged. Frontend state is still
+not an authorization boundary.
+
+### Hosted, metadata and portfolio evidence
+
+Read-only production checks target
+`https://web3-marketplace-phi.vercel.app/`, not the uncommitted local changes.
+Vercel reports **Ready Production**, deployment
+`dpl_DbDCuYcAAQLw4vzo5FNfkMy4pLgU`, exact Run 2 commit
+`b4792b1699a5c89f5fb3672594d92169a5484277`.
+
+Main page and SPA deep link return 200; actual JavaScript/CSS, favicon, brand,
+font and three concepts return 200. Guest `/api/me` returns JSON
+401/`unauthenticated` with `no-store`; unknown API paths return JSON 404 even
+with HTML Accept. These responses have no platform invocation-error header.
+Browser checks confirm preview details contain no trade control and the guest
+wallet workspace separates connection from disabled sign-in. Public static
+responses use existing revalidation (`max-age=0, must-revalidate`); selected
+assets/home show Vercel cache hits. Hashed asset policy was not changed.
+
+Hosted signed login, linked account refresh/logout, real wallet rejection and
+chain actions were **not run**. Local API tests exercise the authentication,
+session refresh/logout, H2 replay/ownership and concurrency paths. The operator's
+earlier hosted signed-auth result is historical evidence. Runtime deployment
+logs are **environment unavailable** with the current connector permissions
+(403); successful probes do not establish every log path or a full wallet flow.
+New WOFF2/derivative assets and lazy chunks require post-release hosted checks.
+
+Title/description, Open Graph and Twitter/X fields, SVG/ICO favicon, 180 px Apple
+icon, robots/sitemap/llms and absolute canonical/social URLs were **verified**.
+Existing 1200 × 630 OG PNG is 635,776 bytes and remains adequate. Canonical stays
+the stable production domain; no preview URL becomes primary. Metadata describes
+an engineering demonstration. The only HTML changes are font/hero preloads.
+GitHub Social Preview upload is a manual repository Settings action using the
+existing OG image, as described by the presentation owner.
+
+README now opens with concise product context, live demo, actual desktop image
+and explicit hosted-versus-public-chain limitations. Architecture, H1–H3,
+PostgreSQL identity, Vercel Services and the AI-assisted workflow retain their
+technical depth. Four WebP captures in `docs/assets/marketplace/` total
+403,950 bytes: desktop 1440 × 1940, detail 1440 × 1000, hosted guest wallets
+1440 × 1100 and mobile 390 × 2200. Desktop/detail/mobile show the local production
+preview; wallets show the current hosted guest state. No authenticated identity,
+real transaction or private environment data appears. Original concept provenance
+and Manrope OFL remain documented. Existing untracked `artifacts/marketplace-ux/`
+and `artifacts/portfolio/` are preserved and excluded from Run 3's change set.
+
+### Dependency and secret hygiene
+
+`pnpm audit --json` **failed** with **12 existing affected entries**:
+1 critical, 4 high, 7 moderate. `pnpm audit --prod --json` **failed** with
+11 entries: 1 critical, 3 high, 7 moderate. There are 11 distinct advisories;
+UUID affects two installed versions. All are transitive. pnpm's production label
+includes React Native/tooling peers reachable through wallet packages, so it does
+not by itself prove browser/API reachability. No product dependencies or versions
+were added/upgraded, no advisories introduced, and the existing Zod override and
+`@solana/web3.js>rpc-websockets: 9.3.8` pin are retained. The latter resolves
+UUID 11.1.1 and preserves the reviewed Vercel loader compatibility fix.
+
+Applicability below is an inference from current source imports, installed code
+and rendered production modules; it is not a claim that an advisory is harmless
+in every consuming environment. Remediation belongs in a focused follow-up with
+the relevant SDK/API/build checks, not a blind global major override.
+
+| Package / severity / advisory | Current applicability and focused recommendation |
+| --- | --- |
+| `bigint-buffer` 1.1.5, high ([GHSA-3gc7-fjrx-p6mg](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg)) | SPL Token dependency. Browser bundle contains its pure-JS implementation, not the vulnerable native binding. API/tooling native use needs separate input-path review. No fixed release is reported; align the upstream SDK or replace the affected path only with verification. |
+| `ws` 8.18.0, moderate / high ([GHSA-58qx-3vcg-4xpx](https://github.com/advisories/GHSA-58qx-3vcg-4xpx), [GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p)) | WalletConnect dependency path; no `ws` rendered in browser (native WebSocket). Selected API transport copies are outside these affected ranges. Prefer a consumer-compatible 8.x transport patch; fixes are 8.20.1 / 8.21.0. |
+| `uuid` 8.3.2 / 9.0.1, moderate ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)) | Browser includes legacy v3/v5 exports via Jayson; inspected RPC IDs use v4. No app path into affected buffer APIs identified. Upgrade the owning consumers compatibly to a fixed version (11.1.1 or later); retain the separate Solana RPC pin. |
+| `decode-uri-component` 0.2.2, moderate ([GHSA-vcc3-ghjq-m6fr](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr)) | WalletConnect/query-string path; absent from rendered browser graph with the current injected connector configuration. Consumer-compatible upgrade to fixed 0.5.0 requires SDK-path review. |
+| `stream-json` 1.9.1, three moderate advisories ([GHSA-528h-pc64-c93x](https://github.com/advisories/GHSA-528h-pc64-c93x), [GHSA-hqr4-qq8f-hg3x](https://github.com/advisories/GHSA-hqr4-qq8f-hg3x), [GHSA-mjw6-4jj6-33hc](https://github.com/advisories/GHSA-mjw6-4jj6-33hc)) | API dependency path through web3.js/Jayson; not rendered in browser. API uses PublicKey and no streaming/filter/Assembler input path was identified. Upgrade through its owning consumer; fixes require 3.5.0 / 3.6.0, so this is a major migration. |
+| `braces` 3.0.3, high ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)) | React Native CLI/Metro peer tooling; absent from browser output. No fixed release reported. Review the owning tooling version/path before accepting untrusted patterns. |
+| `source-map-js` 1.2.1, high ([GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)) | Development-only Vite/PostCSS dependency, absent from browser/API runtime output. Focused patch to 1.2.2 is recommended with a fresh build. |
+| `shell-quote` 1.10.0, critical ([GHSA-pqg4-j6r4-53mv](https://github.com/advisories/GHSA-pqg4-j6r4-53mv)) | React Native/react-devtools tooling peer; absent from browser. No app use to quote untrusted commands identified. Prioritize a consumer-compatible tooling update to fixed 1.11.0 with peer/install review. |
+
+Current source/assets and generated web files were scanned privately for known
+local secrets and credential markers; no match was found. Local `.env` files are
+untracked/ignored, five browser settings contain public configuration only,
+public RPC URLs have no userinfo or credential query, and the frontend has no
+private PostgreSQL URL. Existing deterministic local-only fixtures are unchanged.
+`.gitignore`/`.vercelignore` retain local env, tooling, build, profile and artifact
+exclusions. Screenshots were visually inspected. This is a scoped checkout/build
+review, not an exhaustive Git-history or external dashboard-secret audit.
+
+### Initial Run 3 validation and remaining work
+
+| Command/check | Result and scope |
+| --- | --- |
+| `CI=true pnpm install --frozen-lockfile --ignore-scripts` (Windows process env) | **passed**, six workspace projects; both exact-version UI patches apply, with identical dependency/peer graph apart from patch registration. Dependency lifecycle scripts were deliberately not run for this review. |
+| `pnpm execution:test` | **passed**, 49 frontend tests, no failures/skips. |
+| `pnpm api:test` via isolated local PostgreSQL runner | **passed**, 54 tests, no failures/skips. Dedicated localhost cluster/schema, no Neon or production writes; task-started cluster stopped. |
+| `pnpm typecheck`; `pnpm lint` | **passed**, recursive workspace TypeScript and frontend ESLint. |
+| `pnpm build`; `pnpm --dir apps/api build` | **passed**, fresh production frontend/API outputs. Existing `@scure`/Ox annotation and over-500-KB chunk warnings remain. |
+| `pnpm --filter @vehicle/solana test`; `pnpm sui:test` | **passed**, 3 offline Solana and 2 Sui TypeScript builder tests. Pure-JS bigint fallback warning remains. These do not execute native runtimes. |
+| Local `.tools/foundry/forge.exe build --root packages/contracts`; `test --root packages/contracts` | **passed**, compilation and all 14 EVM tests. Generated three-contract ABIs match the committed frontend artifact. No deployment or transaction sent. |
+| CI YAML/actionlint, Vercel service manifests/entry/routing, documentation links, asset/metadata audit | **passed**, configured checks and owning references valid; Vercel architecture unchanged. Public files match built output; existing OG/icons/canonical valid. |
+| Browser/axe, bundle/Lighthouse, handler/lock comparison, scoped secrets and `git diff --check` | **passed** within the scopes described above. New source/docs/assets/patches reviewed; temporary/generated/unrelated artifacts excluded. |
+| `pnpm audit --json`; `pnpm audit --prod --json` | **failed**, exit 1 for the existing advisory set above; not a clean security audit. |
+| Anchor/Solana validator and Sui/Move native builds/runtime tests | **environment unavailable**, host lacks the required toolchains; not installed in Run 3. |
+| Real connected browser wallets, signed hosted session/link/logout, chain transactions, deployment logs | Wallet/runtime work **not run**; hosted logs **environment unavailable**. These remain explicit manual or environment-dependent scopes. |
+| Hosted Run 3 release / GitHub CI for these initial checks | **not run** at the initial review; see the subsequent authorized final release check below. |
+
+An initial sandbox pnpm launch could not access its cached runtime; scoped host
+checks reused pinned pnpm. First patch registration aborted because noninteractive
+install lacked CI mode, and a lockfile-only attempt re-resolved peer layout.
+The final lockfile was corrected to the original graph plus exact patch metadata;
+frozen install and graph comparison then passed. A mistaken Solana `test:client`
+command was corrected to its actual `test` script. No dependency upgrade or
+production change was required. Audit JSON/tool logs, temporary captures and
+profiles remain ignored, not portfolio assets.
+
+**Readiness:** suitable for public portfolio review as a browse-first engineering
+demonstration, with measured loading improvements and no major accessibility
+finding remaining in the tested UI. This does not establish commercial launch,
+clean dependency security, native Anchor/Move execution or live on-chain trading.
+
+Manual follow-up is real-device/browser and assistive-technology review, actual
+wallet auto-reconnect/signature rejection/login/link/session refresh/logout,
+GitHub Social Preview upload, and post-approved-release verification of the new
+font/derivative/lazy assets and guest API paths against the exact deployed SHA.
+Prioritize the focused tooling/transport advisory follow-ups above.
+
+Before a separately authorized public testnet deployment, compile and execute
+Anchor/Move runtime suites, create isolated test credentials/resources without
+deterministic development keys, and verify each chain's genuine confirmation and
+read reconciliation. Exercise H1 replacement/stale terms, H2 both wallet proofs,
+ownership/replay conflicts, wrong network, signature/transaction rejection and H3
+failed-read recovery. Deployment, chain writes and production configuration are
+separate future work.
+
+## Run 3 final release check
+
+Status: **local release checks passed with documented advisory follow-ups**, on
+**2026-10-08**. Run 3 was visually approved and explicitly authorized for commit
+and push after this focused dependency review. Git integration owns the web
+deployment; no manual deployment, blockchain resource creation, production data
+write, environment change or new feature is part of finalization.
+
+### Critical/high dependency review
+
+Fresh pinned-pnpm audits before remediation reported **1 critical, 4 high,
+7 moderate**; the production-only audit omitted the build-only source-map finding.
+All five critical/high findings are **transitive**. Production dependency labels
+include wallet SDK tooling peers and do not establish deployed reachability.
+The following applicability conclusions are inferences from source imports,
+installed package implementations and the rendered Vite production module graph.
+They are scoped conclusions, not proof that the repository is vulnerability-free.
+
+| Affected version / advisory | Dependency path and deployed applicability | Patched version, action and compatibility risk |
+| --- | --- | --- |
+| `shell-quote` **1.10.0**, critical; [GHSA-pqg4-j6r4-53mv](https://github.com/advisories/GHSA-pqg4-j6r4-53mv), **CVE-2026-102422** | Solana wallet adapter → mobile adapter → React Native → react-devtools-core. Tooling peer, absent from browser output; API has no shell-quote or untrusted shell-command path. The advisory requires quoting mixed comment tokens/newlines into a shell command. | **1.11.0**, applied only to 1.10.0. Within react-devtools-core's `^1.6.1` range. The patched quote function rejects the unsafe comment/newline combination with TypeError; normal quote/parse round trips pass. No shell commands or advisory exploit were executed. |
+| `source-map-js` **1.2.1**, high; [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q), **CVE-2026-93749** | Vite → PostCSS. Development/build-only, absent from browser/API runtime. The indexed source-map offset DoS requires processing a crafted map; production routes accept no source maps. | **1.2.2**, applied only to 1.2.1; within PostCSS's `^1.2.1` range. Malformed maps may now throw; ordinary generator/consumer mapping and fresh production builds pass. |
+| `ws` **8.18.0**, high; [GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p), **CVE-2026-48779**; also moderate [GHSA-58qx-3vcg-4xpx](https://github.com/advisories/GHSA-58qx-3vcg-4xpx) | Wagmi/connectors → WalletConnect/Reown → older Viem **2.23.2**. Browser uses native WebSocket, with no rendered `ws` modules and only the injected EVM connector configured. API imports Solana PublicKey; no app WebSocket server/transport is created. The high finding concerns fragmented-frame memory exhaustion by an external peer. | **8.21.0** fixes both findings, applied only through `viem@2.23.2>ws`. Consumer had pinned 8.18.0; receiver limits/edge behavior can change, so a benign localhost client/server round trip and SDK regressions were run. Other copies remain 7.5.13, 8.21.0 and 8.21.3; no global WebSocket override or SDK major upgrade. |
+| `bigint-buffer` **1.1.5**, high; [GHSA-3gc7-fjrx-p6mg](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg), **CVE-2025-3194** | SPL Token → buffer-layout-utils. Browser graph contains the pure-JS `dist/browser.js` implementation; the vulnerable native binding is not bundled. API has no SPL Token/bigint-buffer input path. No deployed path to the affected native conversion was identified. | **No patched release reported**. Retained; a speculative crypto SDK replacement is not a narrow fix. Review upstream remediation and any native seed/tooling use before accepting untrusted native inputs. Reassess if server-side SPL Token processing is introduced. |
+| `braces` **3.0.3**, high; [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), **CVE-2026-93687** | Solana mobile adapter → React Native community CLI/Metro → file-map → micromatch. Development/tooling peer, absent from browser/API imports and rendered output. No production input reaches recursive brace-pattern compilation. | **No patched release reported**. Retained with upstream follow-up; avoid untrusted nested patterns in this tooling. A consumer/toolchain update requires its own verification, rather than an invented patch or broad React Native upgrade. |
+
+No demonstrably exploitable critical/high path was found in the deployed
+application within this review. The native/tooling findings remain recorded and
+must be revisited when their owning consumers publish fixes or those paths change.
+
+The manifest adds just three exact, scoped security overrides. Lockfile comparison
+against the approved pre-security Run 3 snapshot confirms only their package
+substitutions, integrity records and dependent peer references changed. The first
+version-wide WebSocket attempt altered unrelated peers; it was narrowed before
+acceptance. Original `@solana/web3.js>rpc-websockets: 9.3.8`, UUID **11.1.1** and
+that RPC consumer's `ws` **8.21.3** remain intact. API regressions include the
+existing Node compatibility test with experimental require-module/detect-module
+disabled. The freshly compiled Fastify entrypoint also starts under these flags.
+Legacy UUID copies were not globally forced to a different major.
+
+Both final audit commands still **failed with exit 1**, now reporting **0 critical,
+2 high, 6 moderate** (8 affected dependency entries). Remaining moderate follow-up:
+legacy `uuid` **8.3.2/9.0.1** ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq),
+CVE-2026-41907; fixed 11.1.1), `decode-uri-component` **0.2.2**
+([GHSA-vcc3-ghjq-m6fr](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr),
+CVE-2026-45822; fixed 0.5.0), and `stream-json` **1.9.1**
+([GHSA-528h-pc64-c93x](https://github.com/advisories/GHSA-528h-pc64-c93x),
+CVE-2026-71429; fixed 3.5.0;
+[GHSA-hqr4-qq8f-hg3x](https://github.com/advisories/GHSA-hqr4-qq8f-hg3x),
+CVE-2026-104182; and [GHSA-mjw6-4jj6-33hc](https://github.com/advisories/GHSA-mjw6-4jj6-33hc),
+CVE-2026-104183; fixed 3.6.0). UUID RPC IDs use v4 rather than the affected v3/v5
+buffer path; URI decoding is absent from the active browser graph; API has no
+stream-json Filter/Assembler input path. Their earlier table retains the detailed
+rationale. Prefer verified owning-consumer updates; stream-json and UUID fixes
+cross major boundaries. Audit results are not a clean-security claim.
+
+### Fresh finalization verification
+
+| Command/check | Result and evidence |
+| --- | --- |
+| `pnpm install --frozen-lockfile --ignore-scripts` with Windows CI process environment | **passed**; exact dependency graph and both approved SDK accessibility patches installed. Existing React Native React/type peers and Jayson optional UTF-8 peer warnings remain; no new global peer constraint introduced. |
+| `pnpm execution:test` | **passed**, 49 tests, zero failures/skips; demo assets have no execution identity and cannot become trading cards. |
+| `pnpm api:test` via dedicated local PostgreSQL runner | **passed**, 54 tests, zero failures/skips; authentication, two-proof linking, replay/ownership conflicts, session/logout, concurrency and loader regressions. Dedicated localhost cluster stopped afterward; no Neon writes. |
+| `pnpm typecheck`; `pnpm lint` | **passed**, recursive workspace TypeScript and frontend ESLint. |
+| `pnpm build`; `pnpm --dir apps/api build` | **passed**; existing large wallet SDK chunk and annotation warnings remain. |
+| `pnpm --filter @vehicle/solana test`; `pnpm sui:test`; local Forge build/test | **passed**, 3 offline Solana builder tests, 2 Sui builder tests, 14 EVM runtime tests. Native Anchor/validator and Move runtime checks remain **environment unavailable**; these passes do not establish those runtimes. |
+| Compiled API entrypoint under local Vercel/ordinary flags | **passed**, unchanged GET/POST/query/root/not-found/origin behavior, without Services emulation or SQL. |
+| Protected source/handler/query comparison against Run 2 | **passed**; auth, readiness, H1 purchase intent, H2 linking and H3 reconciliation boundaries, Fastify source/routing, chain builders and deployment configuration unchanged. Demo actions remain disabled; provider/reconnect ownership unchanged. |
+| Dependency normal-API smoke and production module graph | **passed**; normal quote/map APIs and local WebSocket round trip; Solana RPC/UUID/WebSocket resolutions retained. Vulnerable native/tooling modules absent from deployed browser paths. |
+| Vercel service manifests/rewrites/entrypoint, actionlint, README Mermaid/ABI and documentation links | **passed**; Git-integrated native Services architecture unchanged. |
+| Asset/metadata and scoped secrets review | **passed**; all 18 public files match the build; canonical, social image/icons and original vehicle branding preserved. No local env or credential markers tracked; known private values absent from source/browser build. Browser settings remain public, with no private Neon connection string or privileged RPC credential. |
+
+Finalization includes the approved source/style, lazy boundary, WOFF2 font,
+responsive WebP derivatives, four curated portfolio screenshots, README and owning
+verification documents, two exact-version SDK UI patches, and the three reviewed
+security overrides. Temporary captures, audit/tool logs, browser profiles,
+generated build/ABI outputs and existing unrelated `artifacts/` stay outside the
+commit. This review is scoped to the checkout/build, not exhaustive secret-history
+or external dashboard inspection.
+
+The first staged `git diff --check` flagged mandatory unified-diff context prefixes
+in the tab-indented Sui SDK patch (space-before-tab and blank context lines).
+Ordinary source/docs pass the default check; patch files are checked separately
+with only those two syntax-specific whitespace rules disabled. Patch contents and
+their verified pnpm hashes are retained; no source whitespace rule is relaxed.
+
+### Git-integrated deployment checklist
+
+After the deployment reaches **Ready** for the pushed commit, verify:
+
+- Main page, original branding, mobile/desktop layout, reduced motion and no horizontal overflow.
+- Vehicle filtering/details, loading/error surfaces and clearly labeled non-trading Demo Preview.
+- Wallet chooser, connection, network identity, signature rejection and authentication with an actual wallet.
+- Signed session persistence after refresh, account switching and logout; local regressions alone do not prove hosted wallet interaction.
+- Fastify `/api/me` JSON guest 401, root/unknown JSON 404, and unchanged routing; no secret exposure in responses.
+- WOFF2/responsive images/lazy chunks, canonical/social/favicon metadata, and README demo/screenshot links.
+- Production function/runtime logs for boot errors, RPC/UUID loading and unexpected route/database failures; mark unavailable dashboard access explicitly.
+
+No blockchain testnet deployment or new feature follows automatically from this checklist.
+
 ## Choosing checks
 
 For a code change, select the affected matrix rows and regression coverage; do not

@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, useEffect, useRef, useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useQuery } from '@tanstack/react-query';
 import { PublicKey } from '@solana/web3.js';
 import { PROGRAM_ID } from '@vehicle/solana';
 import { useAccount, usePublicClient, useSwitchChain } from 'wagmi';
 import { useCurrentAccount, useCurrentClient, useCurrentNetwork, useDAppKit } from '@mysten/dapp-kit-react';
-import { AccountPanel } from './auth/AccountPanel';
 import { useSession } from './auth/useSession';
 import { addresses, contractsConfigured } from './contracts/addresses';
 import { localChain, rpcUrl } from './contracts/config';
 import { CatalogPreviewCard } from './components/CatalogPreviewCard';
 import { CatalogBrowser } from './components/CatalogBrowser';
 import { Arrow, Brand, EcosystemLabel } from './components/MarketplaceChrome';
-import { SolanaVehicleCard } from './components/SolanaVehicleCard';
-import { SuiVehicleCard } from './components/SuiVehicleCard';
-import { VehicleCard } from './components/VehicleCard';
+import { DeferredFeature } from './components/DeferredFeature';
 import { executionPrompt, resolveExecution } from './execution/resolveExecution';
 import { architectureUrl, catalogMode, catalogStatus, previewVehicles, repositoryUrl } from './presentation/catalog';
 import { suiConfigured, suiMarketId, suiNetwork, suiPackageId, suiRpcUrl, suiVehicleId } from './web3/sui/config';
@@ -24,9 +21,14 @@ const solanaMint = publicKey(import.meta.env.VITE_SOLANA_VEHICLE_MINT);
 const paymentMint = publicKey(import.meta.env.VITE_SOLANA_PAYMENT_MINT);
 const solanaConfigured = Boolean(solanaMint && paymentMint);
 const ecosystems = ['evm', 'solana', 'sui'] as const;
+const AccountPanel = lazy(() => import('./auth/AccountPanel').then(module => ({ default: module.AccountPanel })));
+const VehicleCard = lazy(() => import('./components/VehicleCard').then(module => ({ default: module.VehicleCard })));
+const SolanaVehicleCard = lazy(() => import('./components/SolanaVehicleCard').then(module => ({ default: module.SolanaVehicleCard })));
+const SuiVehicleCard = lazy(() => import('./components/SuiVehicleCard').then(module => ({ default: module.SuiVehicleCard })));
 
 export default function App() {
   const [walletsOpen, setWalletsOpen] = useState(false);
+  const [walletsVisited, setWalletsVisited] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const session = useSession();
@@ -110,7 +112,7 @@ export default function App() {
   const hasPreview = ecosystems.some((ecosystem) => modes[ecosystem] !== 'native');
 
   function openWorkspace(id: 'wallets' | 'network-details') {
-    if (id === 'wallets') setWalletsOpen(true); else setNetworkOpen(true);
+    if (id === 'wallets') { setWalletsVisited(true); setWalletsOpen(true); } else setNetworkOpen(true);
     requestAnimationFrame(() => document.getElementById(id)?.querySelector<HTMLElement>('summary')?.focus());
   }
   async function selectNetwork(ecosystem: 'evm' | 'sui') {
@@ -130,7 +132,7 @@ export default function App() {
   return <>
     <a className="skip-link" href="#catalog">Skip to vehicle catalog</a>
     <header className="site-nav page-width">
-      <a className="brand-link" href="#home" aria-label="Vehicle Marketplace home"><Brand /></a>
+      <a className="brand-link" href="#home"><Brand /></a>
       <nav aria-label="Main navigation"><a href="#catalog">Explore</a><a href="#about">The project</a><a className="nav-source" href={repositoryUrl} target="_blank" rel="noreferrer">Source <Arrow diagonal /></a></nav>
       <a className="button wallet-entry" href="#wallets" onClick={() => openWorkspace('wallets')}>{identity ? 'Your account' : 'Connect wallets'} <Arrow /></a>
     </header>
@@ -141,18 +143,18 @@ export default function App() {
           <h1 id="hero-title">Automotive.<br /><span>Across chains.</span></h1>
           <p className="hero-description">A new perspective on the vehicle marketplace. Explore the collection, then look under the hood of three native blockchain ecosystems.</p>
           <div className="hero-actions"><a className="button button-primary" href="#catalog">Explore vehicles <Arrow /></a><a className="text-link" href={architectureUrl} target="_blank" rel="noreferrer">View architecture <Arrow diagonal /></a></div>
-          <div className="hero-ecosystems" aria-label="Supported ecosystems">{ecosystems.map((ecosystem) => <EcosystemLabel key={ecosystem} ecosystem={ecosystem} />)}</div>
+          <div className="hero-ecosystems" role="group" aria-label="Supported ecosystems">{ecosystems.map((ecosystem) => <EcosystemLabel key={ecosystem} ecosystem={ecosystem} />)}</div>
         </div>
         <figure className="hero-vehicle">
           <div className="hero-image-topline"><span className="eyebrow">Concept / 01</span><span className="preview-label">Demo Preview</span></div>
-          <img src="/vehicles/meridian-hero.webp" alt="Original silver grand touring coupe concept in a graphite studio" width="1440" height="960" fetchPriority="high" />
+          <img src="/vehicles/meridian-hero.webp" srcSet="/vehicles/meridian-hero-720.webp 720w, /vehicles/meridian-hero.webp 1440w" sizes="(max-width: 560px) calc(100vw - 40px), (max-width: 850px) calc(100vw - 48px), (max-width: 1416px) calc((100vw - 116px) * .548), 713px" alt="Original silver grand touring coupe concept in a graphite studio" width="1440" height="960" fetchPriority="high" />
           <figcaption><span>Meridian GT <span className="muted">/ Design concept</span></span><span className="hero-image-note">Illustration, not a live listing</span></figcaption>
         </figure>
       </section>
 
       <div className="project-strip page-width"><span className="eyebrow">An engineering case study</span><p>One application identity. Three native execution models.</p><a href="#about">Discover the build <Arrow /></a></div>
 
-      <section className="catalog-section page-width" id="catalog" aria-labelledby="catalog-title">
+      <section className="catalog-section page-width" id="catalog" tabIndex={-1} aria-labelledby="catalog-title">
         <div className="section-heading"><div><p className="eyebrow">The collection</p><h2 id="catalog-title">Explore the vehicles</h2></div><p>Three ecosystems.<br />A shared place to explore.</p></div>
         {hasPreview && <aside className="demo-notice"><span className="notice-mark" aria-hidden="true">i</span><p><strong>A showcase you can explore.</strong> Demo Preview cards are fictional design concepts with no owner or sale price. Trading is unavailable for previews. Chain-backed cards appear when configured resources can be read.</p><a href="#network-details" onClick={() => openWorkspace('network-details')}>Network details <Arrow diagonal /></a></aside>}
         <CatalogBrowser>
@@ -161,9 +163,11 @@ export default function App() {
             // Hide filtered cards without discarding native transaction/reconciliation state.
             return <div className="catalog-slot" key={vehicle.ecosystem}>
               {!nativeSeen.current[vehicle.ecosystem] && mode !== 'native' ? <CatalogPreviewCard vehicle={vehicle} mode={mode} />
-                : vehicle.ecosystem === 'evm' ? [1n, 2n, 3n].map((tokenId) => <VehicleCard key={`evm-${tokenId}`} tokenId={tokenId} account={address} context={evmContext} identityKey={identity?.userId} />)
+                : <DeferredFeature label={`${vehicle.ecosystem.toUpperCase()} asset interface`}>
+                  {vehicle.ecosystem === 'evm' ? [1n, 2n, 3n].map((tokenId) => <VehicleCard key={`evm-${tokenId}`} tokenId={tokenId} account={address} context={evmContext} identityKey={identity?.userId} />)
                   : vehicle.ecosystem === 'solana' ? <SolanaVehicleCard key={`solana-${solanaMint}`} vehicleMint={solanaMint!} paymentMint={paymentMint!} context={solanaContext} identityKey={identity?.userId} />
                     : <SuiVehicleCard key={`sui-${suiVehicleId}`} context={suiContext} identityKey={identity?.userId} />}
+                </DeferredFeature>}
             </div>;
           })}
         </CatalogBrowser>
@@ -176,9 +180,9 @@ export default function App() {
       </section>
 
       <section className="workspace-section page-width" aria-label="Wallet and network workspace">
-        <details className="workspace-disclosure" id="wallets" open={walletsOpen} onToggle={(event) => setWalletsOpen(event.currentTarget.open)}>
+        <details className="workspace-disclosure" id="wallets" open={walletsOpen} onToggle={(event) => { const open = event.currentTarget.open; setWalletsOpen(open); if (open) setWalletsVisited(true); }}>
           <summary><span><span className="eyebrow">Your workspace</span><span className="disclosure-title">Wallets & application account</span></span><span className="disclosure-caption">Connect, sign in, or link wallets <span aria-hidden="true">+</span></span></summary>
-          <div className="disclosure-body"><p className="workspace-intro">Browsing needs no wallet. To trade a chain-backed asset, connect its wallet and sign in. Connecting a wallet does not create an application account or link a login credential.</p><AccountPanel /></div>
+          <div className="disclosure-body"><p className="workspace-intro">Browsing needs no wallet. To trade a chain-backed asset, connect its wallet and sign in. Connecting a wallet does not create an application account or link a login credential.</p>{walletsVisited && <DeferredFeature label="Wallet and account interface"><AccountPanel /></DeferredFeature>}</div>
         </details>
         <details className="workspace-disclosure" id="network-details" open={networkOpen} onToggle={(event) => setNetworkOpen(event.currentTarget.open)}>
           <summary><span><span className="eyebrow">Advanced</span><span className="disclosure-title">Network & execution details</span></span><span className="disclosure-caption">Readiness, resources, and diagnostics <span aria-hidden="true">+</span></span></summary>

@@ -1,0 +1,74 @@
+diff --git a/dist/web/index.mjs b/dist/web/index.mjs
+index 02762231d4562b8b307d4d3cb2164c56ae686dd0..ce8b39a172a95de303f9f3cd5c98b8ee4cdd352b 100644
+--- a/dist/web/index.mjs
++++ b/dist/web/index.mjs
+@@ -211,7 +211,7 @@ var WalletListItem = class extends LitElement {
+ 	}
+ 	render() {
+ 		return html`
+-			<li>
++			<div>
+ 				<button
+ 					type="button"
+ 					class="wallet-button"
+@@ -221,7 +221,7 @@ var WalletListItem = class extends LitElement {
+ 					<img src=${this.wallet.icon} alt=${`${this.wallet.name} logo`} />
+ 					<p>${this.wallet.name}</p>
+ 				</button>
+-			</li>
++			</div>
+ 		`;
+ 	}
+ 	#walletClicked() {
+@@ -454,10 +454,10 @@ var WalletList = class extends ScopedRegistryHost(LitElement) {
+ 						Select a wallet to install ${arrowRightUpIcon}
+ 					</internal-button>
+ 				</div>` : html`<ul class="wallet-list">
+-					${this.wallets.map((wallet, index) => html`<wallet-list-item
++					${this.wallets.map((wallet, index) => html`<li><wallet-list-item
+ 								.wallet=${wallet}
+ 								?autofocus=${index === 0}
+-							></wallet-list-item>`)}
++							></wallet-list-item></li>`)}
+ 				</ul>`;
+ 	}
+ };
+diff --git a/src/web/internal/wallet-list-item.ts b/src/web/internal/wallet-list-item.ts
+index 333fbb7fca3b19e6684f997422be326a21723835..be94fed0d895ea0a7e7d9c3f29e4f97bf7f29f24 100644
+--- a/src/web/internal/wallet-list-item.ts
++++ b/src/web/internal/wallet-list-item.ts
+@@ -19,7 +19,7 @@ export class WalletListItem extends LitElement {
+ 
+ 	override render() {
+ 		return html`
+-			<li>
++			<div>
+ 				<button
+ 					type="button"
+ 					class="wallet-button"
+@@ -29,7 +29,7 @@ export class WalletListItem extends LitElement {
+ 					<img src=${this.wallet.icon} alt=${`${this.wallet.name} logo`} />
+ 					<p>${this.wallet.name}</p>
+ 				</button>
+-			</li>
++			</div>
+ 		`;
+ 	}
+ 
+diff --git a/src/web/internal/wallet-list.ts b/src/web/internal/wallet-list.ts
+index 466402620f3f91cd0fa3a12bbbf8aef12471c682..dd70be81f077f40924ea8bbd39b396f30c951c01 100644
+--- a/src/web/internal/wallet-list.ts
++++ b/src/web/internal/wallet-list.ts
+@@ -36,10 +36,10 @@ export class WalletList extends ScopedRegistryHost(LitElement) {
+ 			: html`<ul class="wallet-list">
+ 					${this.wallets.map(
+ 						(wallet, index) =>
+-							html`<wallet-list-item
++							html`<li><wallet-list-item
+ 								.wallet=${wallet}
+ 								?autofocus=${index === 0}
+-							></wallet-list-item>`,
++							></wallet-list-item></li>`,
+ 					)}
+ 				</ul>`;
+ 	}

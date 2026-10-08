@@ -26,6 +26,7 @@ responsive rules, focus states and reduced motion live in
 | [TransactionProgress](../../apps/web/src/components/TransactionProgress.tsx) | Shared presentation of native phases, identifiers, uncertainty and read-only recovery. EVM TransactionStatus is a thin adapter. |
 | [ListingPriceField](../../apps/web/src/components/ListingPriceField.tsx) | Six-decimal positive prices, EVM uint256 / Solana-Sui uint64 limits and accessible validation. |
 | [AccountPanel](../../apps/web/src/auth/AccountPanel.tsx), [AccountStatus](../../apps/web/src/auth/AccountStatus.tsx) | Signed login, two-proof linking, progress, rejection, expiration, logout and service recovery. |
+| [DeferredFeature](../../apps/web/src/components/DeferredFeature.tsx) | Accessible loading and isolated failure recovery for account/native feature chunks. |
 | [SolanaWalletDialogProvider](../../apps/web/src/components/SolanaWalletDialogProvider.tsx) | Native dialog using existing WalletModalContext and adapter selection. WalletMultiButton still owns connection; explicit keyboard containment, Escape/backdrop dismissal, focus restoration and scroll locking. |
 
 ## Preview versus native assets
@@ -54,6 +55,20 @@ changes no longer remount them. Once detected, a native card remains mounted
 through network/resource discovery failures so its transaction result and saved
 read-only reconciliation job remain available. Readiness still blocks writes.
 No automatic signing, transaction retry or replacement purchase terms are added.
+
+The account panel loads on its first disclosure opening and remains mounted
+afterwards, including while closed. Native execution cards load only when their
+existing resource discovery selects them; module-level lazy declarations and
+unchanged resource keys retain mounted state. Loading announces progress; a
+failed interface leaves browsing available, exposes diagnostics and offers an
+explicit page reload. Reloading never retries a transaction. Check any original
+submitted identifier before reloading if an interface becomes unavailable.
+
+All wallet providers, their initialization order, reconnect configuration and
+the Buffer-before-bootstrap boundary remain eager and unchanged. App still
+owns session/resource reads and invokes its hooks unconditionally. This split
+defers feature interfaces and builders. The measured SDK startup constraint
+remains in [the quality record](../operations/verification.md#portfolio-quality-verification).
 
 The hero always says Demo Preview. Native artwork is also illustrative and does
 not verify an asset's appearance. Discovery still covers three known EVM token
@@ -133,14 +148,32 @@ external font/image CDN or new runtime dependency.
 | `og-image.png` | 1200 × 630 cover; suitable for manual GitHub Social Preview upload. |
 | `vehicles/meridian-hero.webp` | 1440 × 960 original silver concept, about 84 KB. |
 | `vehicles/meridian.webp`, `vehicles/forma.webp`, `vehicles/atlas.webp` | Three 900 × 600 concepts, about 96 KB total. |
-| `fonts/manrope-variable.ttf`, `fonts/OFL.txt` | Self-hosted Manrope and SIL Open Font License from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/manrope). |
+| `vehicles/meridian-hero-720.webp`, `vehicles/*-480.webp` | Responsive derivatives: 720 × 480 hero (33 KB) and three 480 × 320 concepts (46 KB combined), encoded at WebP quality 90. Larger originals remain available. |
+| `fonts/manrope-variable.woff2`, `fonts/OFL.txt` | Self-hosted Manrope and SIL Open Font License from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/manrope). Lossless WOFF2 conversion retains all 742 glyphs and the variable weight axis; 54 KB versus the previous 165 KB TTF. |
 | `robots.txt`, `sitemap.xml`, `llms.txt` | Discovery and honest preview/engineering description. |
 
 [index.html](../../apps/web/index.html) defines title/description, icons, font
 preload, Open Graph, Twitter/X, canonical and absolute social URLs using the
 operator-confirmed `https://web3-marketplace-phi.vercel.app/`. Update HTML, robots
 and sitemap together if the stable domain changes. Review screenshots live in
-`artifacts/ui-revamp/`, separate from runtime assets.
+`artifacts/ui-revamp/`, separate from runtime assets. Four optimized portfolio
+captures live in `docs/assets/marketplace/`, referenced by the root README.
+Desktop, detail and mobile show the local Run 3 production preview; wallet
+onboarding shows the current hosted guest UI. They contain no authenticated
+account or real transaction. Temporary captures/profiles/audit reports remain
+outside the reviewable source changes.
+
+Image `srcset`/`sizes` follows the existing card, detail and hero breakpoints.
+Below-the-fold artwork remains lazy; the hero has high priority and a matching
+responsive HTML preload so its request starts before wallet JavaScript finishes.
+All images reserve dimensions/aspect ratios. Existing metadata, icons and the
+stable canonical domain remain unchanged.
+
+To set the GitHub repository Social Preview manually, open the repository’s
+**Settings → Social preview → Edit → Upload an image** and select the existing
+`apps/web/public/og-image.png` (1200 × 630, under 1 MB). Inspect the preview before
+saving. No new cover or remote upload is part of this run. See
+[GitHub’s instructions](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/customizing-your-repositorys-social-media-preview).
 
 ## Original image provenance and prompts
 
@@ -182,8 +215,21 @@ local and are excluded from the commit; existing portfolio artifacts are preserv
 No chain resource creation, production/mainnet data mutation, schema/environment
 change or GitHub Social Preview upload is part of this finalization.
 
-Run 3 should verify real browser-wallet login/linking and native actions on
-explicitly authorized test resources, including stale terms, network changes,
-rejections and failed-read recovery. Anchor and Move runtime verification still
-need their toolchains. Measure wallet SDK startup cost before code splitting;
-the existing large bundle warning remains. Social Preview upload is human-only.
+Run 3 measures loading, splits nonessential interfaces, optimizes asset delivery,
+corrects accessible labels and SDK chooser semantics, and verifies the guest UI
+at four viewport sizes. A scoped narrow-screen rule keeps RainbowKit's close
+control and footer visible at 320 px; SDK selection behavior is unchanged.
+[Its quality record](../operations/verification.md#portfolio-quality-verification)
+owns measurements, dependency findings, production checks and verification limits.
+Run 3 is approved for finalization following the
+[focused dependency-security and release check](../operations/verification.md#run-3-final-release-check).
+Three scoped transitive security updates preserve the existing Solana RPC/UUID
+compatibility pin; remaining advisories and verification limits are documented.
+No chain deployment, database/schema, network configuration or authentication
+protocol change is included.
+
+Before public testnet deployment, obtain the Anchor/Move toolchains and verify
+real browser-wallet login/linking and native actions on explicitly authorized
+test resources, including stale terms, network changes, rejections and failed-read
+recovery. These are separate future verification steps; Run 3 sends no real
+blockchain transactions. Social Preview upload remains a manual operator task.

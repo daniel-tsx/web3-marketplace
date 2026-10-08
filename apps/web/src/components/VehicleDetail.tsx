@@ -59,14 +59,14 @@ export function VehicleDetail({ name, ecosystem, image, description, availabilit
   const matches = catalogMatches(useCatalogFilter(), { name, ecosystem, description, listed });
   return <>
     <article hidden={!matches} className={`vehicle-card${preview ? ' preview-card' : ''}${open ? ' is-selected' : ''}`}>
-      <button className="vehicle-open" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} aria-label={`Explore ${name}`}>
+      <button className="vehicle-open" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}>
         <VehicleVisual image={image} alt={`Original concept illustration for ${name}; asset appearance unverified`} preview={preview} />
         <span className="vehicle-content"><span className="vehicle-topline"><EcosystemLabel ecosystem={ecosystem} /><span className="technical-label">{preview ? 'Design concept' : 'Chain-backed asset'}</span></span><span className="vehicle-title">{name}</span><span className="vehicle-description">{description}</span><span className="native-availability">{availability}</span><span className="detail-entry">{preview ? 'Explore concept' : 'View asset & listing'} <Arrow /></span></span>
       </button>
       {status && <div className="card-transaction">{status}</div>}
     </article>
     <DetailDialog open={open && matches} onClose={() => setOpen(false)} title={name}>
-      <div className="detail-grid"><div className="detail-presentation"><VehicleVisual image={image} alt={`Original illustrative artwork for ${name}`} preview={preview} /><p className="detail-art-note">Original concept artwork. {preview ? 'This fictional vehicle has no on-chain asset, owner or sale price.' : 'The illustration does not verify the actual asset’s appearance or specifications.'}</p></div><div className="detail-content"><EcosystemLabel ecosystem={ecosystem} /><p className="vehicle-description">{description}</p><p className="native-availability" role="status">{availability}</p>{children}{status}</div></div>
+      <div className="detail-grid"><div className="detail-presentation"><VehicleVisual image={image} alt={`Original illustrative artwork for ${name}`} preview={preview} sizes="(max-width: 560px) calc(100vw - 26px), (max-width: 850px) calc(100vw - 50px), 560px" /><p className="detail-art-note">Original concept artwork. {preview ? 'This fictional vehicle has no on-chain asset, owner or sale price.' : 'The illustration does not verify the actual asset’s appearance or specifications.'}</p></div><div className="detail-content"><EcosystemLabel ecosystem={ecosystem} /><p className="vehicle-description">{description}</p><p className="native-availability" role="status">{availability}</p>{children}{status}</div></div>
     </DetailDialog>
   </>;
 }

@@ -1,0 +1,56 @@
+diff --git a/dist/components/chunk-CUM2H4AA.js b/dist/components/chunk-CUM2H4AA.js
+index fcbdd9ebe5aefa863baf6e125f582c3f4b0b5ffc..3ad9c39306210424bc24afcfeadf1e6ece752ee5 100644
+--- a/dist/components/chunk-CUM2H4AA.js
++++ b/dist/components/chunk-CUM2H4AA.js
+@@ -39,7 +39,8 @@ function AsyncImage({
+       height: typeof height === "string" ? height : void 0,
+       overflow: "hidden",
+       position: "relative",
+-      role: "img",
++      role: alt ? "img" : void 0,
++      "aria-hidden": alt ? void 0 : true,
+       style: {
+         background,
+         height: typeof height === "number" ? height : void 0,
+diff --git a/dist/components/chunk-L5QBG7AY.js b/dist/components/chunk-L5QBG7AY.js
+index e0951aedbeb82a67894cd1b5c29323b05e39bc4a..a65d1ef6f17fa6bd3817faba7291262455032b4a 100644
+--- a/dist/components/chunk-L5QBG7AY.js
++++ b/dist/components/chunk-L5QBG7AY.js
+@@ -39,7 +39,8 @@ function AsyncImage({
+       height: typeof height === "string" ? height : void 0,
+       overflow: "hidden",
+       position: "relative",
+-      role: "img",
++      role: alt ? "img" : void 0,
++      "aria-hidden": alt ? void 0 : true,
+       style: {
+         background,
+         height: typeof height === "number" ? height : void 0,
+diff --git a/dist/components/chunk-Z2CMCMO5.js b/dist/components/chunk-Z2CMCMO5.js
+index 91c02bde507bb240c2b2de4d38ec4b1f7a478998..8bb6d7dd980e7b274bddba043cd8664b1ac4fa93 100644
+--- a/dist/components/chunk-Z2CMCMO5.js
++++ b/dist/components/chunk-Z2CMCMO5.js
+@@ -39,7 +39,8 @@ function AsyncImage({
+       height: typeof height === "string" ? height : void 0,
+       overflow: "hidden",
+       position: "relative",
+-      role: "img",
++      role: alt ? "img" : void 0,
++      "aria-hidden": alt ? void 0 : true,
+       style: {
+         background,
+         height: typeof height === "number" ? height : void 0,
+diff --git a/dist/index.js b/dist/index.js
+index 7915116f6f41bbb6b2941f1fbc989669c8498d4c..6f701e13758bc2816c50f8d890579647f5031a18 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -265,7 +265,8 @@ function AsyncImage({
+       height: typeof height === "string" ? height : void 0,
+       overflow: "hidden",
+       position: "relative",
+-      role: "img",
++      role: alt ? "img" : void 0,
++      "aria-hidden": alt ? void 0 : true,
+       style: {
+         background,
+         height: typeof height === "number" ? height : void 0,
