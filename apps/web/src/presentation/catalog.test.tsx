@@ -14,13 +14,16 @@ test('unconfigured, pending, failed and negative resource checks never expose na
   assert.equal(catalogMode(true, { isPending: false, isSuccess: true, data: true }), 'native');
 });
 
-test('each preview is explicitly illustrative and has no enabled transaction controls', () => {
+test('each preview opens a detail experience while exposing no transaction controls or prices', () => {
   for (const vehicle of previewVehicles) {
     for (const mode of ['preview', 'checking', 'unavailable'] as const) {
       const html = renderToStaticMarkup(createElement(CatalogPreviewCard, { vehicle, mode }));
       assert.match(html, /Demo Preview/);
       assert.match(html, /No on-chain listing, owner, or sale price/);
-      assert.match(html, /<button[^>]*disabled=""[^>]*>Trading unavailable<\/button>/);
+      assert.match(html, /aria-haspopup="dialog"/);
+      assert.match(html, /Explore concept/);
+      assert.match(html, /Trading unavailable for this concept/);
+      assert.match(html, /No transaction is being simulated, submitted or confirmed/);
       assert.doesNotMatch(html, /mUSDC|Buy vehicle|Approve spending|0x[a-f0-9]{40}/);
     }
   }

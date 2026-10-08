@@ -33,6 +33,15 @@ test('browser API requests use the configured base and preserve session credenti
         assert.equal(calls[0][1].method, 'GET');
         assert.equal(calls[1][1].method, 'POST');
         assert.equal(calls[1][1].body, JSON.stringify({ ecosystem: 'evm', address: 'wallet' }));
+        fetch.mock.mockImplementation(async () => Response.json({ error: { code: 'unauthenticated', message: 'Session expired' } }, { status: 401 }));
+        assert.equal(await api.getSession(), null);
+        fetch.mock.mockImplementation(async () => new Response('<html>Service unavailable</html>', { status: 503 }));
+        await assert.rejects(api.getSession(), (error: unknown) => error instanceof Error && 'code' in error && error.code === 'api_unavailable');
+        fetch.mock.mockImplementation(async () => Response.json({ userId: 'user', wallets: [] }));
+        const abort = new AbortController();
+        await api.getSession(abort.signal);
+        const last = fetch.mock.calls.at(-1)!.arguments as unknown as [string, RequestInit];
+        assert.equal(last[1].signal, abort.signal);
       } finally { await vite.close(); }
     });
   }

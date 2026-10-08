@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useQuery } from '@tanstack/react-query';
 import { PublicKey } from '@solana/web3.js';
@@ -10,11 +10,12 @@ import { useSession } from './auth/useSession';
 import { addresses, contractsConfigured } from './contracts/addresses';
 import { localChain, rpcUrl } from './contracts/config';
 import { CatalogPreviewCard } from './components/CatalogPreviewCard';
+import { CatalogBrowser } from './components/CatalogBrowser';
 import { Arrow, Brand, EcosystemLabel } from './components/MarketplaceChrome';
 import { SolanaVehicleCard } from './components/SolanaVehicleCard';
 import { SuiVehicleCard } from './components/SuiVehicleCard';
 import { VehicleCard } from './components/VehicleCard';
-import { executionPrompt, resolveExecution, type Ecosystem } from './execution/resolveExecution';
+import { executionPrompt, resolveExecution } from './execution/resolveExecution';
 import { architectureUrl, catalogMode, catalogStatus, previewVehicles, repositoryUrl } from './presentation/catalog';
 import { suiConfigured, suiMarketId, suiNetwork, suiPackageId, suiRpcUrl, suiVehicleId } from './web3/sui/config';
 
@@ -25,12 +26,14 @@ const solanaConfigured = Boolean(solanaMint && paymentMint);
 const ecosystems = ['evm', 'solana', 'sui'] as const;
 
 export default function App() {
-  const [filter, setFilter] = useState<Ecosystem | 'all'>('all');
   const [walletsOpen, setWalletsOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   const session = useSession();
+  // Retained cached identity during a failed /me read is not execution readiness.
+  const identity = session.isSuccess ? session.data : null;
   const { address, chainId, isConnected } = useAccount();
-  const { switchChain, isPending: switching } = useSwitchChain();
+  const { switchChainAsync, isPending: switching } = useSwitchChain();
   const evmClient = usePublicClient({ chainId: localChain.id });
   const solanaWallet = useWallet();
   const { connection } = useConnection();
@@ -74,28 +77,34 @@ export default function App() {
     solana: catalogMode(solanaConfigured, program),
     sui: suiCurrentNetwork !== suiNetwork && suiConfigured ? 'unavailable' as const : catalogMode(suiConfigured, suiResources),
   };
+  const nativeSeen = useRef({ evm: false, solana: false, sui: false });
+  for (const ecosystem of ecosystems) if (modes[ecosystem] === 'native') nativeSeen.current[ecosystem] = true;
   const evmContext = resolveExecution({
     requirement: { ecosystem: 'evm', network: `EVM chain ${localChain.id}` },
-    userId: session.data?.userId,
-    linkedWallets: session.data?.wallets ?? [],
+    userId: identity?.userId,
+    linkedWallets: identity?.wallets ?? [],
     connectedWallet: address,
     networkReady: chainId === localChain.id,
     resourcesReady: modes.evm === 'native',
+    currentNetwork: chainId ? `EVM chain ${chainId}` : 'Wallet disconnected',
   });
   const solanaContext = resolveExecution({
     requirement: { ecosystem: 'solana', network: 'the configured Solana validator' },
-    userId: session.data?.userId,
-    linkedWallets: session.data?.wallets ?? [],
+    userId: identity?.userId,
+    linkedWallets: identity?.wallets ?? [],
     connectedWallet: solanaWallet.publicKey?.toBase58(),
     networkReady: Boolean(program.data),
+    resourcesReady: modes.solana === 'native',
+    currentNetwork: `Configured RPC: ${connection.rpcEndpoint}. Match this network in your wallet.`,
   });
   const suiContext = resolveExecution({
     requirement: { ecosystem: 'sui', network: suiNetwork },
-    userId: session.data?.userId,
-    linkedWallets: session.data?.wallets ?? [],
+    userId: identity?.userId,
+    linkedWallets: identity?.wallets ?? [],
     connectedWallet: suiAccount?.address,
     networkReady: suiCurrentNetwork === suiNetwork,
     resourcesReady: suiConfigured && suiResources.isSuccess,
+    currentNetwork: `Sui ${suiCurrentNetwork}`,
   });
   const contexts = { evm: evmContext, solana: solanaContext, sui: suiContext };
   const hasPreview = ecosystems.some((ecosystem) => modes[ecosystem] !== 'native');
@@ -104,13 +113,26 @@ export default function App() {
     if (id === 'wallets') setWalletsOpen(true); else setNetworkOpen(true);
     requestAnimationFrame(() => document.getElementById(id)?.querySelector<HTMLElement>('summary')?.focus());
   }
+  async function selectNetwork(ecosystem: 'evm' | 'sui') {
+    setNetworkError(null);
+    try { if (ecosystem === 'evm') await switchChainAsync({ chainId: localChain.id }); else await dAppKit.switchNetwork(suiNetwork); }
+    catch (cause) { setNetworkError(cause instanceof Error ? cause.message : String(cause)); }
+  }
+  useEffect(() => {
+    function navigate(event: Event) {
+      const id = (event as CustomEvent).detail;
+      if (id === 'wallets' || id === 'network-details') openWorkspace(id);
+    }
+    window.addEventListener('marketplace-workspace', navigate);
+    return () => window.removeEventListener('marketplace-workspace', navigate);
+  }, []);
 
   return <>
     <a className="skip-link" href="#catalog">Skip to vehicle catalog</a>
     <header className="site-nav page-width">
       <a className="brand-link" href="#home" aria-label="Vehicle Marketplace home"><Brand /></a>
       <nav aria-label="Main navigation"><a href="#catalog">Explore</a><a href="#about">The project</a><a className="nav-source" href={repositoryUrl} target="_blank" rel="noreferrer">Source <Arrow diagonal /></a></nav>
-      <a className="button wallet-entry" href="#wallets" onClick={() => openWorkspace('wallets')}>Connect wallets <Arrow /></a>
+      <a className="button wallet-entry" href="#wallets" onClick={() => openWorkspace('wallets')}>{identity ? 'Your account' : 'Connect wallets'} <Arrow /></a>
     </header>
     <main id="home">
       <section className="hero page-width" aria-labelledby="hero-title">
@@ -132,20 +154,19 @@ export default function App() {
 
       <section className="catalog-section page-width" id="catalog" aria-labelledby="catalog-title">
         <div className="section-heading"><div><p className="eyebrow">The collection</p><h2 id="catalog-title">Explore the vehicles</h2></div><p>Three ecosystems.<br />A shared place to explore.</p></div>
-        <div className="catalog-toolbar"><div className="catalog-filters" role="group" aria-label="Filter catalog by ecosystem">{(['all', ...ecosystems] as const).map((value) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'all' ? 'All ecosystems' : value === 'evm' ? 'EVM' : value === 'solana' ? 'Solana' : 'Sui'}</button>)}</div><span className="catalog-hint">{hasPreview ? 'Preview & chain-backed assets' : 'Chain-backed assets'}</span></div>
         {hasPreview && <aside className="demo-notice"><span className="notice-mark" aria-hidden="true">i</span><p><strong>A showcase you can explore.</strong> Demo Preview cards are fictional design concepts with no owner or sale price. Trading is unavailable for previews. Chain-backed cards appear when configured resources can be read.</p><a href="#network-details" onClick={() => openWorkspace('network-details')}>Network details <Arrow diagonal /></a></aside>}
-        <div className="vehicle-grid" aria-live="polite" aria-label="Vehicle catalog">
+        <CatalogBrowser>
           {previewVehicles.map((vehicle) => {
             const mode = modes[vehicle.ecosystem];
             // Hide filtered cards without discarding native transaction/reconciliation state.
-            return <div className="catalog-slot" key={vehicle.ecosystem} hidden={filter !== 'all' && vehicle.ecosystem !== filter}>
-              {mode !== 'native' ? <CatalogPreviewCard vehicle={vehicle} mode={mode} />
-                : vehicle.ecosystem === 'evm' ? [1n, 2n, 3n].map((tokenId) => <VehicleCard key={`evm-${tokenId}-${address ?? 'none'}-${chainId ?? 'none'}-${session.data?.userId ?? 'guest'}`} tokenId={tokenId} account={address} executionReady={evmContext.status === 'ready'} />)
-                  : vehicle.ecosystem === 'solana' ? <SolanaVehicleCard key={`solana-${solanaMint}-${solanaWallet.publicKey?.toBase58() ?? 'none'}-${session.data?.userId ?? 'guest'}`} vehicleMint={solanaMint!} paymentMint={paymentMint!} context={solanaContext} />
-                    : <SuiVehicleCard key={`sui-${suiVehicleId}-${suiAccount?.address ?? 'none'}-${session.data?.userId ?? 'guest'}`} context={suiContext} />}
+            return <div className="catalog-slot" key={vehicle.ecosystem}>
+              {!nativeSeen.current[vehicle.ecosystem] && mode !== 'native' ? <CatalogPreviewCard vehicle={vehicle} mode={mode} />
+                : vehicle.ecosystem === 'evm' ? [1n, 2n, 3n].map((tokenId) => <VehicleCard key={`evm-${tokenId}`} tokenId={tokenId} account={address} context={evmContext} identityKey={identity?.userId} />)
+                  : vehicle.ecosystem === 'solana' ? <SolanaVehicleCard key={`solana-${solanaMint}`} vehicleMint={solanaMint!} paymentMint={paymentMint!} context={solanaContext} identityKey={identity?.userId} />
+                    : <SuiVehicleCard key={`sui-${suiVehicleId}`} context={suiContext} identityKey={identity?.userId} />}
             </div>;
           })}
-        </div>
+        </CatalogBrowser>
         <p className="catalog-footnote">Vehicle artwork is original illustrative content. Chain-backed cards identify the actual configured asset; its appearance is not verified by the illustration.</p>
       </section>
 
@@ -166,12 +187,13 @@ export default function App() {
             <div className="network-grid">{ecosystems.map((ecosystem) => <article key={ecosystem}><EcosystemLabel ecosystem={ecosystem} /><h3>{catalogStatus[modes[ecosystem]]}</h3><p>{executionPrompt(contexts[ecosystem]) ?? 'Execution wallet requirements met. Asset and payment checks still apply.'}</p><span className="technical-label">Resolver: {contexts[ecosystem].status}</span></article>)}</div>
             <dl className="network-endpoints"><dt>EVM chain {localChain.id}</dt><dd><code>{rpcUrl}</code></dd><dt>Solana RPC</dt><dd><code>{connection.rpcEndpoint}</code></dd><dt>Sui {suiNetwork} gRPC</dt><dd><code>{suiRpcUrl}</code></dd></dl>
             <div className="account-actions">
-              {contractsConfigured && modes.evm !== 'native' && <button disabled={evmResources.isFetching} onClick={() => void evmResources.refetch()}>Recheck EVM resources</button>}
-              {solanaConfigured && modes.solana !== 'native' && <button disabled={program.isFetching} onClick={() => void program.refetch()}>Recheck Solana program</button>}
-              {suiConfigured && suiCurrentNetwork === suiNetwork && modes.sui !== 'native' && <button disabled={suiResources.isFetching} onClick={() => void suiResources.refetch()}>Recheck Sui resources</button>}
-              {isConnected && chainId !== localChain.id && <button disabled={switching} onClick={() => switchChain({ chainId: localChain.id })}>Switch EVM wallet to chain {localChain.id}</button>}
-              {suiCurrentNetwork !== suiNetwork && <button onClick={() => dAppKit.switchNetwork(suiNetwork)}>Select Sui {suiNetwork}</button>}
+              {contractsConfigured && modes.evm !== 'native' && <button disabled={evmResources.isFetching} onClick={() => void evmResources.refetch()}>{evmResources.isFetching ? 'Checking EVM resources…' : 'Recheck EVM resources'}</button>}
+              {solanaConfigured && modes.solana !== 'native' && <button disabled={program.isFetching} onClick={() => void program.refetch()}>{program.isFetching ? 'Checking Solana program…' : 'Recheck Solana program'}</button>}
+              {suiConfigured && suiCurrentNetwork === suiNetwork && modes.sui !== 'native' && <button disabled={suiResources.isFetching} onClick={() => void suiResources.refetch()}>{suiResources.isFetching ? 'Checking Sui resources…' : 'Recheck Sui resources'}</button>}
+              {isConnected && chainId !== localChain.id && <button disabled={switching} onClick={() => void selectNetwork('evm')}>{switching ? 'Waiting for network selection…' : `Switch EVM wallet to chain ${localChain.id}`}</button>}
+              {suiCurrentNetwork !== suiNetwork && <button onClick={() => void selectNetwork('sui')}>Select Sui {suiNetwork}</button>}
             </div>
+            {networkError && <div role="alert"><p className="error">Network selection did not complete. Select the required network in your wallet, then check readiness again.</p><details><summary>Network selection details</summary><p>{networkError}</p></details></div>}
             {[evmResources.error, program.error, suiResources.error].some(Boolean) && <details className="read-diagnostics"><summary>Resource read diagnostics</summary>{evmResources.error && <p className="error">EVM: {evmResources.error.message}</p>}{program.error && <p className="error">Solana: {program.error.message}</p>}{suiResources.error && <p className="error">Sui: {suiResources.error.message}</p>}</details>}
             <p className="muted">Public chain deployment and browser-wallet verification are separate setup steps. Source code and resource detection do not establish production readiness.</p>
           </div>

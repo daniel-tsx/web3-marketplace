@@ -10,20 +10,23 @@ export class ApiError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
 }
 
-async function request<T>(path: string, body?: object): Promise<T> {
+async function request<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: body ? 'POST' : 'GET',
     credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
-  const result = await response.json();
+  let result;
+  try { result = await response.json(); }
+  catch { throw new ApiError('api_unavailable', 'The account service returned an unreadable response. Try again shortly.'); }
   if (!response.ok) throw new ApiError(result.error?.code ?? 'api_error', result.error?.message ?? `API returned ${response.status}`);
   return result as T;
 }
 
-export async function getSession(): Promise<Session | null> {
-  try { return await request<Session>('/me'); }
+export async function getSession(signal?: AbortSignal): Promise<Session | null> {
+  try { return await request<Session>('/me', undefined, signal); }
   catch (cause) { if (cause instanceof ApiError && cause.code === 'unauthenticated') return null; throw cause; }
 }
 

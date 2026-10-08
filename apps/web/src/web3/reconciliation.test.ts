@@ -169,7 +169,9 @@ test('reconciliation-failure UI states execution success, retains the hash, and 
   }));
   assert.match(markup, /Transaction succeeded/);
   assert.match(markup, /0x123/);
-  assert.match(markup, /State refresh failed: RPC unavailable/);
+  assert.match(markup, /state refresh failed/);
+  assert.match(markup, /Technical transaction details/);
+  assert.match(markup, /RPC unavailable/);
   assert.match(markup, /do not resubmit the transaction/);
   assert.match(markup, /Retry state refresh/);
   assert.doesNotMatch(markup, /Confirmed/);

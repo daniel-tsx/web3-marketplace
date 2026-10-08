@@ -9,6 +9,8 @@ export interface ExecutionContext extends ExecutionRequirement {
   connectedWallet?: string;
   linkedWallet?: string;
   status: ExecutionStatus;
+  currentNetwork?: string;
+  checks?: { authenticated: boolean; walletLinked: boolean; networkReady: boolean; resourcesReady: boolean };
 }
 
 export function resolveExecution(input: {
@@ -18,6 +20,7 @@ export function resolveExecution(input: {
   connectedWallet?: string;
   networkReady: boolean;
   resourcesReady?: boolean;
+  currentNetwork?: string;
 }): ExecutionContext {
   const { requirement, userId, linkedWallets, connectedWallet, networkReady, resourcesReady = true } = input;
   const matches = (a: string, b: string) => requirement.ecosystem === 'evm'
@@ -26,7 +29,8 @@ export function resolveExecution(input: {
       ? isValidSuiAddress(a) && isValidSuiAddress(b) && normalizeSuiAddress(a) === normalizeSuiAddress(b)
       : a === b;
   const linked = linkedWallets.filter((wallet) => wallet.ecosystem === requirement.ecosystem);
-  const context = { ...requirement, connectedWallet, linkedWallet: linked.find((wallet) => connectedWallet && matches(wallet.address, connectedWallet))?.address ?? linked[0]?.address };
+  const matchingWallet = linked.find((wallet) => connectedWallet && matches(wallet.address, connectedWallet));
+  const context = { ...requirement, connectedWallet, linkedWallet: matchingWallet?.address ?? linked[0]?.address, currentNetwork: input.currentNetwork, checks: { authenticated: Boolean(userId), walletLinked: Boolean(matchingWallet), networkReady, resourcesReady } };
   if (!userId) return { ...context, status: 'unauthenticated' };
   if (!linked.length) return { ...context, status: 'wallet-not-linked' };
   if (!connectedWallet) return { ...context, status: 'wallet-not-connected' };

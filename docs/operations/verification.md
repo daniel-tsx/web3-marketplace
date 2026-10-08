@@ -406,6 +406,68 @@ the earlier native Services asset smoke remains historical evidence.
 | Scope/secrets, native configuration/upload/browser-output audit, documentation links and `git diff --check` | **passed**, only the intended five files; exactly one Vercel-only mount removal, no API service transforms, unchanged entrypoint/build/output/web routing, existing auth/security/wallet/persistence handlers, dependency pins, UI/branding and blockchain source. Private env/credentials/generated files and existing untracked portfolio artifacts excluded. |
 | Corrected Production deployment and signed hosted wallet/Neon flow | **not run**; confirm the deployed commit, then follow [the hosted checklist](vercel.md#hosted-verification-after-review). A local pass does not establish hosted recovery. |
 
+## Marketplace UX verification
+
+Executed on **2026-10-08**, Windows, Node `24.19.0`, pnpm `10.26.0`.
+The [current presentation owner](../features/marketplace-presentation.md) describes
+behavior. Screenshots and temporary review/debug tooling are local-only and are
+excluded from the finalized source commit.
+
+| Check | Result and scope |
+| --- | --- |
+| `pnpm execution:test` | **passed**, 49 frontend tests: catalog/demo filtering, detail disclosure, frozen review and disabled actions, account presentation, session races/expiry, transport errors, readiness, H1 and H3. Pure/SSR/query tests do not prove wallet or chain execution. |
+| `pnpm api:test` via task-local runner | **passed**, 54 API tests, no skips, dedicated localhost PostgreSQL. Existing signed proofs, H2 pairings, origins, sessions, replay and concurrency retained. Test-created schemas were cleaned by the suite; task-started PostgreSQL was stopped. No Neon or production database used. |
+| `pnpm typecheck`; `pnpm lint`; `pnpm build`; `pnpm --dir apps/api build` | **passed**, recursive TypeScript, frontend ESLint, Vite production build and API compilation. Existing dependency annotation and 500 KB chunk warnings remain. |
+| Local browser, 1440 / 768 / 390 px | **passed**, visual inspection and overflow/image checks; ecosystem/search/active filters, empty recovery, preview detail, account/RPC-unavailable state, Solana chooser, workspace navigation and copy feedback. Reduced motion uses automatic scrolling; measured token contrast is at least 6.66:1 for tested body/status pairs. |
+| Detail/chooser keyboard regressions | **failed before fixes**, reverse Tab escaped to the body in both detail and Solana chooser; **passed after fixes**, reverse Tab reaches the last dialog control, Tab returns to close, and Escape restores the card/Select Wallet trigger. Native dialog remains the modality owner. |
+| Labeled local synthetic UI harness | **passed**, frozen terms remain version 7 when replaced by version 8; stale/identity changes disable confirmation; newly reviewed version 8 executes once; reconciliation retry increments reads without another execution. Synthetic callbacks only, no API/wallet/chain response mocking in the product. |
+| Native handler/protected-path audit; doc targets/new-file whitespace; `git diff --check` | **passed**, original buy/list/cancel/approval/refresh handler bodies and signature dispatch retained; API, schemas, chain builders/hooks, reconciliation engine, dependencies, routing and branding unchanged. Existing portfolio work preserved. |
+| Hosted auth, connected browser wallets, EVM/Anchor/Move execution | **not run**, no configured live chain runtime or test wallet in this browser pass. EVM contracts/chain clients were unchanged; no contract deployment or ledger reset. Anchor/Move toolchains remain unavailable from prior host evidence and were not installed. |
+
+The three new session regressions **failed with the previous invalidation-only
+strategy**, then passed with explicit cancellation/fresh reads and logout cache
+replacement. The first new-code typecheck **failed** on Solana query-key access
+and Sui union generic inference; both were corrected before final passes.
+Initial sandbox pnpm launch could not access its cached runtime and attempted a
+blocked registry request; host-access checks reused pinned pnpm. An initial local
+API runner stalled on Windows inherited subprocess handles; the task-owned
+runner was stopped, subprocess I/O corrected, and the fresh suite passed with
+cleanup. The isolated browser harness first required Vite's development preamble;
+it was corrected before interaction assertions. A mistaken `pnpm test:web`
+invocation failed because that script does not exist; `pnpm execution:test`
+then passed. None required product dependency
+or external infrastructure changes.
+
+### Run 2 finalization after visual approval
+
+The operator approved vehicle details, wallet selection and mobile layouts.
+Final pre-push runs of `pnpm execution:test` (**49 passed**), `pnpm api:test`
+against dedicated localhost PostgreSQL (**54 passed**, no skips),
+`pnpm typecheck`, `pnpm lint`, `pnpm build` and `pnpm --dir apps/api build`
+all **passed** on 2026-10-08. The task-started test database was stopped.
+Existing dependency annotation and large-chunk warnings remain.
+
+The commit includes only intended web source/styles/manifest/tests and the two
+owning documents. Artwork is unchanged. Screenshots, synthetic browser harness,
+local test tooling, generated builds, environment files and unrelated portfolio
+artifacts are excluded. The native action/refresh handler audit retains the
+original implementations; authentication API, signature dispatch, chain builders,
+confirmation hooks, reconciliation engine and readiness status ordering remain
+unchanged. Preview components import no native execution hooks and expose no
+trading controls; their regression tests pass.
+
+Credential review covers tracked paths, staged content and known local secret
+values without printing them. Only safe `.env.example` files may be tracked;
+existing deterministic local-only test fixtures are unchanged. This is a scoped
+release check, not a claim that historical Git objects or future dashboard
+configuration have been exhaustively audited.
+
+After pushing, follow the [Vercel hosted verification procedure](vercel.md#hosted-verification-after-review)
+and verify the Git-integrated deployment's exact commit, Ready status, frontend
+assets/detail/wallet/mobile surfaces and guest API responses. Signed hosted auth
+and chain execution remain separate unverified scopes. No Run 3 or blockchain
+deployment is included.
+
 ## Choosing checks
 
 For a code change, select the affected matrix rows and regression coverage; do not
