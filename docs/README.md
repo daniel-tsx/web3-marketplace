@@ -13,6 +13,7 @@ truth and source paths; follow [AGENTS.md](../AGENTS.md) for behavioral policy.
 | Documentation routing and lifecycle | This index |
 | Engineering sequence and multi-agent handoffs | [AI_WORKFLOW](AI_WORKFLOW.md) |
 | Current system boundaries and chain comparison | [Multichain system](architecture/multichain-system.md) |
+| Visual identity, browse-first catalog and branding assets | [Marketplace presentation](features/marketplace-presentation.md) |
 | Identity, custody, authorization and result boundaries | [Trust boundaries](architecture/trust-boundaries.md) |
 | Verification commands, prerequisites and host limitations | [Verification](operations/verification.md) |
 | Vercel Services target, environment and deployment prerequisites | [Vercel deployment](operations/vercel.md) |
@@ -40,6 +41,7 @@ and tests are linked in [the source-of-truth map](AGENT_START_HERE.md#source-of-
 | Sui Move/client | [Run 3](run-03-sui-multichain.md), [H1 Sui section](audit-fix-01-purchase-intent.md#sui-mechanism), [verification](operations/verification.md) | Move sources/scenarios, BCS parsers/builders, Sui result handling, query keys and card. |
 | Authentication/identity | [Trust boundaries](architecture/trust-boundaries.md), [PostgreSQL persistence](operations/postgres.md), [Run 2 identity/proofs](run-02-auth-solana-multichain.md), [Run 3 Sui proofs](run-03-sui-multichain.md#2-sui-authentication-and-application-identity) | API server/database/migrations/tests; auth browser client, session query and AccountPanel. |
 | Frontend cross-chain execution | [Multichain system](architecture/multichain-system.md), [Trust boundaries](architecture/trust-boundaries.md), relevant run's flow (plus H1 for purchases) | App, bootstrap, resolver/tests, affected chain's card/reads/confirmation hook. |
+| Frontend presentation and branding | [Marketplace presentation](features/marketplace-presentation.md), [Multichain system](architecture/multichain-system.md), [verification](operations/verification.md) | App, presentation/catalog, MarketplaceChrome, cards, AccountPanel, styles and public assets; retain native execution boundaries. |
 | Setup or check failures | [Verification](operations/verification.md), affected run's setup section | Relevant manifests/config, public configuration readers and local scripts; never print env/key files. |
 | Workflow/documentation | [AI_WORKFLOW](AI_WORKFLOW.md), this lifecycle, [known drift](AGENT_START_HERE.md#known-documentation-drift) | Owning document, referenced source, package scripts and local links. |
 
@@ -81,8 +83,8 @@ update inbound links. Do not keep two current documents claiming the same subjec
 
 - `docs/AGENT_START_HERE.md`, `README.md`, `AI_WORKFLOW.md`: entry, routing, workflow.
 - `docs/architecture/`: maintained system and trust-boundary explanations.
-- `docs/features/`: feature/invariant owners when needed; no directory is created yet
-  because H1 already has its own guide at the existing path.
+- `docs/features/`: feature owners, currently marketplace presentation; H1 retains
+  its existing owning guide.
 - `docs/operations/`: reproducible commands and prerequisites.
 - `docs/archive/`: replaced plans/reviews when needed; no empty archive is created.
 

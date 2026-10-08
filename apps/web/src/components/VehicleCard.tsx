@@ -9,6 +9,7 @@ import { useTransactionFlow } from '../web3/useTransactionFlow';
 import { useVehicleState } from '../web3/useVehicleState';
 import { refetchAffectedQueries } from '../web3/reconciliation';
 import { TransactionStatus } from './TransactionStatus';
+import { AssetReadError, EcosystemLabel, VehicleVisual } from './MarketplaceChrome';
 
 const sameAddress = (a?: Address, b?: Address) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
@@ -103,8 +104,13 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
   const canShowBuyerActions = executionReady && account && active && !ownListing && !staleOwner && data.approved && buyerReady;
 
   return <article className="vehicle-card">
-    <p className="eyebrow">EVM · Anvil 31337</p><h2>Vehicle #{tokenId.toString()}</h2>
-    <dl>
+    <VehicleVisual image={tokenId === 2n ? 'forma' : tokenId === 3n ? 'atlas' : 'meridian'} alt={`Concept illustration for EVM vehicle ${tokenId}; actual appearance unverified`} />
+    <div className="vehicle-content">
+    <div className="vehicle-topline"><EcosystemLabel ecosystem="evm" /><span className="technical-label">Chain-backed asset</span></div>
+    <h3>Vehicle #{tokenId.toString()}</h3>
+    <p className="vehicle-description">EVM chain {localChain.id} / ERC-721</p>
+    <p className="native-availability">{readError ? 'Asset reads unavailable' : data.listing.isPending || data.owner.isPending ? 'Reading current asset…' : active ? staleOwner ? 'Listing needs owner review' : `Listed at ${money(price)}` : 'Not listed for sale'}</p>
+    <details className="asset-details"><summary>Asset & listing details</summary><dl>
       <dt>Current owner</dt><dd><code>{owner ?? 'Loading…'}</code></dd>
       <dt>Listing</dt><dd>{active ? staleOwner ? 'Stale: NFT changed hands' : 'Active' : 'Inactive'}</dd>
       <dt>Seller</dt><dd><code>{active ? seller : '—'}</code></dd>
@@ -113,8 +119,9 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
       <dt>Your balance</dt><dd>{account ? money(data.balance.data) : 'Connect wallet'}</dd>
       <dt>Your allowance</dt><dd>{account ? money(data.allowance.data) : 'Connect wallet'}</dd>
       <dt>Marketplace NFT approval</dt><dd>{data.nftApproval.isSuccess && data.operatorApproval.isSuccess ? data.approved ? 'Approved' : 'Not approved' : 'Loading…'}</dd>
-    </dl>
-    {readError && <p role="alert" className="error">Read failed: {readError.message}</p>}
+    </dl></details>
+    {readError && <AssetReadError>{readError.message}</AssetReadError>}
+    {!executionReady && <p className="execution-prompt">Connect and sign in with a linked EVM wallet on chain {localChain.id} to manage this asset.</p>}
     {canShowSellerActions && ownListing && <button disabled={tx.busy} onClick={cancelListing}>Cancel listing</button>}
     {canShowSellerActions && ownVehicle && (!active || staleOwner) && !data.approved && <button disabled={tx.busy} onClick={approveNft}>Approve Marketplace for NFT</button>}
     {canShowSellerActions && ownVehicle && (!active || staleOwner) && data.approved && <div className="action-row">
@@ -127,5 +134,6 @@ export function VehicleCard({ tokenId, account, executionReady }: { tokenId: big
     {active && !staleOwner && !data.approved && !ownListing && <p>Seller must restore NFT approval before purchase.</p>}
     <TransactionStatus phase={tx.phase} retryReconciliation={tx.retryReconciliation} />
     {tx.phase.stage === 'failed' && tx.phase.error.kind === 'stale-listing' && <button onClick={() => void refresh(data.listing.queryKey, data.owner.queryKey, data.nftApproval.queryKey).catch(console.error)}>Refresh listing and review terms</button>}
+    </div>
   </article>;
 }

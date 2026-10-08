@@ -8,6 +8,7 @@ import { suiCoinType, suiMarketId, suiPackageId, suiVehicleId } from '../web3/su
 import { useSuiVehicleState } from '../web3/sui/useSuiVehicleState';
 import { reconcileSuiVehicleState } from '../web3/sui/reconcileVehicleState';
 import { useSuiTransaction } from '../web3/sui/useSuiTransaction';
+import { AssetReadError, EcosystemLabel, VehicleVisual } from './MarketplaceChrome';
 
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
 
@@ -46,8 +47,13 @@ export function SuiVehicleCard({ context }: { context: ExecutionContext }) {
   }
 
   return <article className="vehicle-card">
-    <p className="eyebrow">Sui · {state.network}</p>
-    <h2>Vehicle object</h2>
+    <VehicleVisual image="atlas" alt="Original touring estate illustration; Sui asset appearance unverified" />
+    <div className="vehicle-content">
+    <div className="vehicle-topline"><EcosystemLabel ecosystem="sui" /><span className="technical-label">Chain-backed asset</span></div>
+    <h3>{listing?.vehicleName ?? state.vehicle.data?.name ?? 'Vehicle object'}</h3>
+    <p className="vehicle-description">Sui {state.network} / native Move object</p>
+    <p className="native-availability">{readError ? 'Asset reads unavailable' : state.market.isPending || (state.market.data?.listingId && state.listing.isPending) ? 'Reading current listing…' : listing ? `Listed at ${money(listing.price)}` : 'Not listed for sale'}</p>
+    <details className="asset-details"><summary>Asset & listing details</summary>
     <p className="muted">Address-owned when idle, held inside a shared Listing while for sale · <code>{suiVehicleId}</code></p>
     <dl>
       <dt>Market object</dt><dd><code>{suiMarketId}</code></dd>
@@ -58,7 +64,8 @@ export function SuiVehicleCard({ context }: { context: ExecutionContext }) {
       <dt>Ownership</dt><dd>{listing ? 'Wrapped in shared Listing' : state.vehicle.data?.owner ?? '…'}</dd>
       <dt>Your payment balance</dt><dd>{owner ? money(state.buyerBalance.data) : 'Connect wallet'}</dd>
     </dl>
-    {readError && <p role="alert" className="error">Sui read failed: {readError.message}</p>}
+    </details>
+    {readError && <AssetReadError>{readError.message}</AssetReadError>}
     {!ready && <p className="execution-prompt">{executionPrompt(context)}</p>}
     {ready && state.market.isSuccess && !state.market.data.listingId && !listing && state.vehicle.data?.owner?.toLowerCase() === owner?.toLowerCase() && <div className="action-row">
       <label>Price in mUSDC <input value={priceInput} onChange={(event) => setPriceInput(event.target.value)} inputMode="decimal" /></label>
@@ -76,5 +83,6 @@ export function SuiVehicleCard({ context }: { context: ExecutionContext }) {
       {tx.phase.stage === 'confirmed' && <><p>Confirmed. Affected Sui reads refreshed.</p><details><summary>Effects, events, and balance changes</summary><pre>{tx.phase.details}</pre></details></>}
       {(tx.phase.stage === 'failed' || tx.phase.stage === 'rejected') && <p className="error">{tx.phase.message}</p>}
     </div>}
+    </div>
   </article>;
 }

@@ -38,7 +38,7 @@ export function resolveExecution(input: {
 
 export function executionPrompt(context: ExecutionContext): string | null {
   switch (context.status) {
-    case 'unauthenticated': return 'Log in with either wallet to use marketplace actions.';
+    case 'unauthenticated': return 'Sign in with a wallet to use marketplace actions.';
     case 'wallet-not-linked': return `Link a ${context.ecosystem.toUpperCase()} wallet to this application account.`;
     case 'wallet-not-connected': return `Connect your linked ${context.ecosystem.toUpperCase()} wallet.`;
     case 'wallet-mismatch': return `Connected ${context.ecosystem.toUpperCase()} wallet differs from this account’s linked wallet. Switch wallets or link this one explicitly.`;

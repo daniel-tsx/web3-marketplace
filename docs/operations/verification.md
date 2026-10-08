@@ -202,6 +202,39 @@ updated. Temporary validation tools live under ignored `.tools/`, outside the
 workspace dependency manifests. No commit, push, deployment, seed, ledger reset,
 repository-setting change or live database initialization was performed.
 
+## UI revamp verification
+
+Executed on **2026-10-08**, Windows, Node `24.19.0`, pnpm `10.26.0`.
+[Marketplace presentation](../features/marketplace-presentation.md) owns behavior,
+design, assets and image provenance. These results concern the local implementation,
+not a deployment of the revamp.
+
+| Command/check | Result and scope |
+| --- | --- |
+| `pnpm typecheck` | **passed**, recursive API/web/Solana/Sui TypeScript. |
+| `pnpm lint` | **passed**, frontend ESLint. |
+| `pnpm execution:test` | **passed**, all 37 tests, including existing API-base/credentials, resolver, H1/H3 and Sui helper coverage plus preview-mode/rendering regressions. No real wallet/RPC execution. |
+| `pnpm build` | **passed**, final web TypeScript and production Vite build. Existing Rollup dependency-annotation and large-chunk warnings remain; largest JS chunk about 1.78 MB / 541 KB gzip. No added runtime dependency or lockfile change. |
+| `node .tools\ui-revamp\asset-audit.cjs` | **passed**, all 14 public files match built output, OG 1200 × 630, touch icon 180 × 180, ICO 16/32/48, canonical/social URLs and Vercel SPA asset exclusions. Two actual local private configuration values checked privately are absent from browser outputs. This is a scoped leakage check, not an exhaustive secret audit. |
+| `pnpm --dir apps/web exec vite preview --host 127.0.0.1 --port 4173` and `node .tools\ui-revamp\http-assets.cjs` | **passed**, production bundle served locally; all 14 public assets returned exact bytes over HTTP with correct image MIME types. Not Vercel Services runtime evidence. |
+| Chromium visual/interaction review | **passed**, local Vite/production preview at 1440, 768, 390 and 320 pixels. No visible horizontal overflow or broken images; font loaded; previews browsable with unavailable/unconfigured chains and failed account reads. Ecosystem filters, wallet/network entry links, all three connection pickers and new Solana dialog Escape/focus restoration checked without connecting or signing. |
+| Contrast/reduced motion | **passed**, sampled token contrast: body/canvas 16.65:1, muted/dark surfaces 6.66–7.83:1, accent/button 11.3:1, error/surface 8.88:1. Chromium reduced-motion emulation disables smooth scrolling and CSS motion. Not a full accessibility certification. |
+| `node .tools\ui-revamp\docs-audit.cjs` / `git -c diff.ignoreSubmodules=all diff --check` | **passed**, 253 local documentation links/anchors, new component whitespace and tracked diff whitespace. Submodule inspection excluded due sandbox access; API/package/lockfile/service-route diff is empty. |
+| Production `GET https://web3-marketplace-phi.vercel.app/api/me` | **failed**, unauthenticated read returned HTTP 500, `text/plain`, `FUNCTION_INVOCATION_FAILED`. Cause unverified; hosted authentication/routing health cannot be claimed. No remote mutation or deployment performed. |
+| API tests/build, chain runtime suites, real signed wallet flows | **not run**, no backend/chain implementation changes. Dialog opening is not a wallet connection or signed-auth result. Public-chain resources were not deployed; Anchor/Move runtime limitations remain. |
+
+Initial sandboxed pnpm attempts **failed** before checks ran because Corepack could
+not access its pinned pnpm cache/download. The installed pinned tooling passed
+with host access. Initial sandboxed browser startup also could not write its
+socket directory; host access resolved that preview-tool limitation. The first
+sandboxed loopback HTTP asset audit returned `fetch failed`; the same audit with
+host loopback access passed.
+Review screenshots are `artifacts/ui-revamp/desktop.png`, `desktop-full.png`,
+`mobile.png` and `mobile-full.png`. Host-local audit scripts are ignored and
+not portable repository test prerequisites. Native signing, confirmation,
+reauthentication and purchase builders remain unchanged. No deployment,
+environment/schema change or chain resource mutation was performed during verification.
+
 ## Choosing checks
 
 For a code change, select the affected matrix rows and regression coverage; do not

@@ -8,6 +8,7 @@ import { executionPrompt, type ExecutionContext } from '../execution/resolveExec
 import { solanaKey, useSolanaVehicleState } from '../web3/solana/useSolanaVehicleState';
 import { useSolanaTransaction } from '../web3/solana/useSolanaTransaction';
 import { refetchAffectedQueries } from '../web3/reconciliation';
+import { AssetReadError, EcosystemLabel, VehicleVisual } from './MarketplaceChrome';
 
 const money = (amount?: bigint) => amount === undefined ? '…' : `${formatUnits(amount, 6)} mUSDC`;
 
@@ -62,8 +63,13 @@ export function SolanaVehicleCard({ vehicleMint, paymentMint, context }: { vehic
   }
 
   return <article className="vehicle-card">
-    <p className="eyebrow">Solana · localnet</p>
-    <h2>Vehicle token</h2>
+    <VehicleVisual image="forma" alt="Original sports coupe illustration; Solana asset appearance unverified" />
+    <div className="vehicle-content">
+    <div className="vehicle-topline"><EcosystemLabel ecosystem="solana" /><span className="technical-label">Chain-backed asset</span></div>
+    <h3>Vehicle token</h3>
+    <p className="vehicle-description">Supply-one SPL asset / configured validator</p>
+    <p className="native-availability">{readError ? 'Asset reads unavailable' : state.listing.isPending ? 'Reading current listing…' : listing ? state.paymentMintMatches ? `Listed at ${money(listing.price)}` : 'Payment asset not verified' : 'Not listed for sale'}</p>
+    <details className="asset-details"><summary>Asset & listing details</summary>
     <p className="muted">Unique SPL mint, supply 1 · <code>{mint}</code></p>
     <dl>
       <dt>Listing PDA</dt><dd>{state.listing.isPending ? 'Loading…' : listing ? 'Active' : 'Inactive'}</dd>
@@ -75,7 +81,8 @@ export function SolanaVehicleCard({ vehicleMint, paymentMint, context }: { vehic
       <dt>Your vehicle units</dt><dd>{owner ? state.vehicleBalance.data?.toString() ?? '…' : 'Connect wallet'}</dd>
       <dt>Your payment balance</dt><dd>{!state.paymentMintMatches ? 'Payment configuration not verified' : owner ? money(state.paymentBalance.data) : 'Connect wallet'}</dd>
     </dl>
-    {readError && <p role="alert" className="error">Solana read failed: {readError.message}</p>}
+    </details>
+    {readError && <AssetReadError>{readError.message}</AssetReadError>}
     {context.status !== 'ready' && <p className="execution-prompt">{executionPrompt(context)}</p>}
     {state.config.isSuccess && !state.paymentMintMatches && <p role="alert" className="error">Payment mint mismatch. This card's mUSDC configuration does not match the marketplace. Trading is disabled.</p>}
     {ready && !listing && state.vehicleBalance.data === 1n && <div className="action-row">
@@ -96,5 +103,6 @@ export function SolanaVehicleCard({ vehicleMint, paymentMint, context }: { vehic
       {(tx.phase.stage === 'failed' || tx.phase.stage === 'rejected') && <p className="error">{tx.phase.message}</p>}
       {tx.phase.stage === 'failed' && <button onClick={() => void refresh([solanaKey.listing(mint), solanaKey.escrow(mint), solanaKey.token(paymentMint.toBase58(), owner ?? 'disconnected')]).catch(console.error)}>Refresh listing and review terms</button>}
     </div>}
+    </div>
   </article>;
 }

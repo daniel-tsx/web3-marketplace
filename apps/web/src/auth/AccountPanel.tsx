@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useAccount, useSignMessage } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { ConnectButton as SuiConnectButton, useCurrentAccount, useCurrentWallet, useDAppKit, useWalletConnection } from '@mysten/dapp-kit-react';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { ApiError, logout, requestChallenge, requestWalletLink, verifyChallenge, verifyWalletLink, type LinkChallenge } from './api';
@@ -125,11 +126,11 @@ export function AccountPanel() {
   }
 
   return <section className="chain-panel" aria-label="Application identity and wallets">
-    <h2>Application identity</h2>
-    {session.isPending ? <p>Checking application session…</p> : session.isError ? <p role="alert" className="error">Session check failed: {session.error.message}</p> : <p>Session: <strong>{session.data ? 'Authenticated' : 'Unauthenticated'}</strong>{session.data && <> · User <code>{session.data.userId}</code></>}</p>}
+    <h3>Your application account</h3>
+    {session.isPending ? <p role="status">Checking your account…</p> : session.isError ? <div className="account-error" role="alert"><p>Your account could not be checked. You can still browse the collection.</p><button onClick={() => void session.refetch()}>Retry account check</button><details><summary>Account diagnostics</summary><p className="error">{session.error.message}</p></details></div> : <p><strong>{session.data ? 'Signed in' : 'Browsing as a guest'}</strong>{session.data && <> · Account <code>{session.data.userId}</code></>}</p>}
     <div className="account-columns">
-      <div><h3>Linked wallets</h3>{session.data?.wallets.length ? <ul>{session.data.wallets.map((wallet) => <li key={`${wallet.ecosystem}:${wallet.address}`}>{wallet.ecosystem.toUpperCase()}: <code>{wallet.address}</code></li>)}</ul> : <p>None for this session.</p>}</div>
-      <div><h3>Connected in this browser</h3><p>EVM: <code>{evmAddress ?? 'Disconnected'}</code></p><p>Solana: <code>{solana.publicKey?.toBase58() ?? 'Disconnected'}</code></p><WalletMultiButton /><p className="muted">Solana RPC: <code>{connection.rpcEndpoint}</code></p><p>Sui: <code>{suiAccount?.address ?? 'Disconnected'}</code> {suiWallet?.name && `(${suiWallet.name})`}</p><SuiConnectButton /><p className="muted">Sui connection: {suiConnection.status}</p></div>
+      <div><h4>Linked login wallets</h4>{session.data?.wallets.length ? <ul>{session.data.wallets.map((wallet) => <li key={`${wallet.ecosystem}:${wallet.address}`}>{wallet.ecosystem.toUpperCase()}: <code>{wallet.address}</code></li>)}</ul> : <p>Sign in with a wallet to establish an account. Additional wallets can then be linked with signed proofs.</p>}</div>
+      <div className="browser-wallets"><h4>Connected in this browser</h4><div className="wallet-row"><p>EVM <code>{evmAddress ?? 'Disconnected'}</code></p><ConnectButton chainStatus="none" showBalance={false} /></div><div className="wallet-row"><p>Solana <code>{solana.publicKey?.toBase58() ?? 'Disconnected'}</code></p><WalletMultiButton /></div><details><summary>Solana connection details</summary><p className="muted">RPC: <code>{connection.rpcEndpoint}</code></p></details><div className="wallet-row"><p>Sui <code>{suiAccount?.address ?? 'Disconnected'}</code> {suiWallet?.name && `(${suiWallet.name})`}</p><SuiConnectButton /></div><p className="muted">Sui connection: {suiConnection.status}</p></div>
     </div>
     <div className="account-actions">
       {session.data ? <>

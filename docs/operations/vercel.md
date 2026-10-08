@@ -264,9 +264,11 @@ the visitor's machine. Before a functional deployment:
    payment mint and a vehicle mint with supply 1. Sui needs a published package,
    shared Market, Vehicle, the correct MUSDC payment type and gas/payment funds.
 3. Make the small public-network configuration/metadata adjustments required by
-   those chosen deployments. EVM transport reads `VITE_CHAIN_ID`, but catalog
-   chain IDs and Anvil labels remain hardcoded; Solana catalog/labels remain
-   `localnet`. An environment-only change does not update all network metadata.
+   those chosen deployments. EVM transport and catalog labels read `VITE_CHAIN_ID`,
+   but the wallet network name in `contracts/config.ts` remains `Local Anvil`.
+   Solana uses a neutral configured-validator label and the compiled program ID;
+   environment variables cannot select a different program. An environment-only
+   change does not update all network metadata or prove deployment compatibility.
    Never reuse deterministic local fixture keys on public networks or repoint
    the local seed scripts to them.
 4. Configure the canonical Production origin, enable system metadata for Preview

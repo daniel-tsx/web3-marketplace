@@ -58,6 +58,12 @@ slot. Discovery is intentionally limited to these configured assets; there is no
 general indexer. The API does not
 mirror any listings, balances or settlement outcomes.
 
+The [browse-first presentation](../features/marketplace-presentation.md) displays
+clearly labeled fictional Demo Preview concepts for missing, pending or unreadable
+resources. These contain no owners/prices and cannot trade. Read-only discovery
+reveals native cards; their asset reads, identity/network gates and transaction
+semantics remain authoritative. Artwork does not verify a chain asset's appearance.
+
 EVM/Solana fixtures target local chains; the Sui frontend defaults to testnet and
 needs public identifiers from an actual deployed package plus funded demo assets.
 Source availability does not imply deployment, real-wallet compatibility or

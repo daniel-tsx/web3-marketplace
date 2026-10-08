@@ -1,0 +1,12 @@
+# Vehicle Marketplace
+
+> An automotive engineering case study by Eastbase Studio spanning EVM, Solana, and Sui.
+
+Demo Preview vehicles are fictional illustrative concepts, with no ownership,
+listing, sale price, or transaction history. Previews cannot be traded.
+Configured chain resources expose native asset reads and guarded wallet actions.
+Source code availability does not establish deployed resources or production readiness.
+
+- [Source](https://github.com/daniel-tsx/web3-marketplace): application and native chain implementations.
+- [Architecture](https://github.com/daniel-tsx/web3-marketplace/blob/main/docs/architecture/multichain-system.md): shared identity, distinct execution models.
+- [Trust boundaries](https://github.com/daniel-tsx/web3-marketplace/blob/main/docs/architecture/trust-boundaries.md): purchase intent, wallet linking, execution and reconciliation.

@@ -6,6 +6,12 @@ A production-oriented Web3 engineering case study spanning EVM, Solana, and Sui.
 
 ## What this project demonstrates
 
+The web interface is a browse-first automotive showcase. Clearly labeled
+**Demo Preview** concepts remain visible when blockchain resources are missing
+or unreadable; they carry no owner or sale price and cannot be traded. Configured
+resources reveal native asset cards and their existing guarded execution flows.
+[Presentation, branding and asset provenance](docs/features/marketplace-presentation.md).
+
 - **Shared application identity:** signed wallet proofs establish a UUID account and HttpOnly session; PostgreSQL stores identity, never marketplace settlement.
 - **Resource-driven execution:** a vehicle's ecosystem determines the required linked execution wallet, independently of the wallet used to log in.
 - **Three native marketplaces:** noncustodial ERC-721 listings on EVM, PDA-controlled SPL escrow on Solana, and shared Listing objects wrapping Vehicles on Sui.

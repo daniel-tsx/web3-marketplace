@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "build": "tsc --noEmit && vite build",
-    "test": "tsx --test src/auth/api.test.ts src/execution/resolveExecution.test.ts src/web3/sui/suiFlow.test.ts src/web3/purchaseIntent.test.ts src/web3/reconciliation.test.ts"
+    "test": "tsx --test src/auth/api.test.ts src/execution/resolveExecution.test.ts src/web3/sui/suiFlow.test.ts src/web3/purchaseIntent.test.ts src/web3/reconciliation.test.ts src/presentation/catalog.test.tsx"
   },
   "dependencies": {
     "@mysten/dapp-kit-react": "^1.0.0",
